@@ -14,7 +14,6 @@ import GoogleIcon from '../assets/svgs/GoogleIcon'
 import AppleIcon from '../assets/svgs/AppleIcon'
 import { RootStackParamList } from '../navigations/RootNavigation'
 import { supabase } from '../lib/supabase'
-import { API_BASE_URL } from '../lib/api/client'
 import { useAuthStore } from '../../store/authStore'
 import { fetchProfile } from '../lib/profile'
 
@@ -32,33 +31,8 @@ const LoginScreen = () => {
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [forgotLoading, setForgotLoading] = useState(false)
   const [error, setError] = useState('')
   const setAuth = useAuthStore((s) => s.setAuth)
-
-  const handleForgotPassword = async () => {
-    const trimmedEmail = email.trim()
-    if (!trimmedEmail) {
-      setError('Please enter your email to reset password.')
-      return
-    }
-    if (forgotLoading) return
-    setError('')
-    setForgotLoading(true)
-    try {
-      await fetch(`${API_BASE_URL}/auth/forgot-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: trimmedEmail }),
-      })
-      navigation.navigate('VerificationCodeScreen', {
-        email: trimmedEmail,
-        context: 'forgot-password',
-      })
-    } finally {
-      setForgotLoading(false)
-    }
-  }
 
   const handleSignIn = async () => {
     if (loading) return
@@ -201,10 +175,10 @@ const LoginScreen = () => {
         ) : null}
         <Pressable
           style={{ marginTop: error ? 4 : -8 }}
-          onPress={handleForgotPassword}
+          onPress={() => navigation.navigate('ForgotPasswordScreen')}
         >
           <Text style={{ color: colors.primary, fontFamily: fontFamilies.interMedium, fontSize: fonts.caption }}>
-            {forgotLoading ? 'Sending code...' : 'Forgot Password?'}
+            Forgot Password?
           </Text>
         </Pressable>
 

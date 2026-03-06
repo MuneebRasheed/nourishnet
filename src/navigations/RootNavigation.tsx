@@ -6,6 +6,7 @@ import NotificationsScreen from '../screens/NotificationsScreen';
 import NotificationSettingsScreen from '../screens/NotificationSettingsScreen';
 import OnBoardingScreen from '../screens/OnBoardingScreen';
 import LoginScreen from '../screens/LoginScreen';
+import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import SignupScreen from '../screens/SignupScreen';
 import VerificationCodeScreen from '../screens/VerficationCodeScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
@@ -33,6 +34,7 @@ export type RootStackParamList = {
   SplashScreen: undefined;
   OnBoardingScreen: undefined;
   LoginScreen: { role?: AuthRole } | undefined;
+  ForgotPasswordScreen: undefined;
   SignupScreen: { role?: AuthRole } | undefined;
   VerificationCodeScreen: { email?: string; role?: AuthRole; context?: 'signup' | 'forgot-password' };
   EditProfileScreen: { email?: string; otp?: string };
@@ -82,6 +84,11 @@ function RootNavigation() {
       <Stack.Screen
         name="LoginScreen"
         component={LoginScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="ForgotPasswordScreen"
+        component={ForgotPasswordScreen}
         options={{ headerShown: false }}
       />
       <Stack.Screen
