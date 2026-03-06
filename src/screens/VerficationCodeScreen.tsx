@@ -7,7 +7,6 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
 } from 'react-native';
 import ClockIcon from '../assets/svgs/ClockICon';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,15 +22,16 @@ import ContinueButton from '../components/ContinueButton';
 import { TasksHeader } from '../components/TasksHeader';
 import type { RootStackParamList } from '../navigations/RootNavigation';
 import { API_BASE_URL } from '../lib/api/client';
+import { supabase } from '../lib/supabase';
 
-const CODE_EXPIRE_SECONDS = 30;
+const CODE_EXPIRE_SECONDS = 15 * 60;
 
 type Props = NativeStackScreenProps<RootStackParamList, 'VerificationCodeScreen'>;
 
-const CODE_LENGTH = 4;
+const CODE_LENGTH = 6;
 
 export default function VerificationCodeScreen({ route }: Props) {
-  const { email = '', role } = route.params ?? {};
+  const { email = '', role, context = 'signup' } = route.params ?? {};
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList, 'VerificationCodeScreen'>>();
   const insets = useSafeAreaInsets();
@@ -76,18 +76,44 @@ export default function VerificationCodeScreen({ route }: Props) {
     setError('');
     const otp = code.join('');
     if (otp.length !== CODE_LENGTH) {
-      setError('Please enter the full 4-digit code.');
+      setError(`Please enter the full ${CODE_LENGTH}-digit code.`);
       return;
     }
-    if (otp === '1111') {
+    setLoading(true);
+    try {
+      if (context === 'forgot-password') {
+        const res = await fetch(`${API_BASE_URL}/auth/verify-reset-otp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, otp }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setError(body?.error ?? 'Invalid or expired code. Please request a new one.');
+          return;
+        }
+        navigation.replace('CreateNewPasswordScreen', { email, otp });
+        return;
+      }
+      const res = await fetch(`${API_BASE_URL}/auth/verify-signup-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, otp }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(body?.error ?? 'Invalid or expired code. Please request a new one.');
+        return;
+      }
+      await supabase.auth.refreshSession();
       if (role === 'provider') {
         navigation.replace('ProviderProfileScreen', { email, otp });
       } else {
         navigation.replace('EditProfileScreen', { email, otp });
       }
-      return;
+    } finally {
+      setLoading(false);
     }
-    setError('Invalid code. Please try again.');
   };
 
   const handleResend = async () => {
@@ -95,11 +121,20 @@ export default function VerificationCodeScreen({ route }: Props) {
     setError('');
     setResendLoading(true);
     try {
-      await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+      const endpoint =
+        context === 'forgot-password'
+          ? `${API_BASE_URL}/auth/forgot-password`
+          : `${API_BASE_URL}/auth/send-signup-otp`;
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok && body?.error) {
+        setError(body.error);
+        return;
+      }
       setSecondsLeft(CODE_EXPIRE_SECONDS);
     } finally {
       setResendLoading(false);
@@ -138,14 +173,10 @@ export default function VerificationCodeScreen({ route }: Props) {
           ]}
         >
           We've sent a verification code to{'\n'}
-          <Text style={{ 
-            fontFamily: fontFamilies.interBold,
-             color: colors.text,
-             fontSize: fontSizes.body 
-             }}>
+          <Text style={{ fontFamily: fontFamilies.interBold, color: colors.text, fontSize: fontSizes.body }}>
             {displayDestination}.
           </Text>
-          Enter the code below {'\n'}to continue.
+          {'\n'}Enter the code below to continue.
         </Text>
 
         <Text
@@ -158,7 +189,7 @@ export default function VerificationCodeScreen({ route }: Props) {
             },
           ]}
         >
-          Enter 4-digit code
+          Enter {CODE_LENGTH}-digit code
         </Text>
 
         <View style={styles.codeRow}>
@@ -233,41 +264,50 @@ export default function VerificationCodeScreen({ route }: Props) {
         </View>
 
         <ContinueButton
-          label={'Verify'}
+          label={loading ? 'Verifying...' : 'Verify'}
           onPress={() => !loading && handleVerify()}
           isDark={isDark}
         />
+
+        <View style={styles.resendRow}>
+          <Text
+            style={[
+              styles.resendLabel,
+              { color: colors.textSecondary, fontSize: fontSizes.subhead, fontFamily: fontFamilies.inter },
+            ]}
+          >
+            Didn't receive the code?{' '}
+          </Text>
+          <Text
+            onPress={resendLoading ? undefined : handleResend}
+            style={[
+              styles.resendLink,
+              {
+                color: colors.primary,
+                fontSize: fontSizes.subhead,
+                fontFamily: fontFamilies.interMedium,
+                opacity: resendLoading ? 0.6 : 1,
+              },
+            ]}
+          >
+            {resendLoading ? 'Sending...' : 'Resend'}
+          </Text>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  wrapper: {
-    flex: 1,
-  },
-  scroll: {
-    flex: 1,
-  },
-  content: {
-    paddingHorizontal: 16,
-    paddingTop: 24,
-  },
-  instruction: {
-    marginBottom: 24,
-    textAlign: 'center',
-    
-  },
-  label: {
-    marginBottom: 12,
-  },
-  errorText: {
-    marginTop: -15,
-    marginBottom: 24,
-  },
+  wrapper: { flex: 1 },
+  scroll: { flex: 1 },
+  content: { paddingHorizontal: 16, paddingTop: 24 },
+  instruction: { marginBottom: 24, textAlign: 'center' },
+  label: { marginBottom: 12 },
+  errorText: { marginTop: -15, marginBottom: 24 },
   codeRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 8,
     marginBottom: 12,
     justifyContent: 'center',
   },
@@ -281,12 +321,19 @@ const styles = StyleSheet.create({
   timerLabel: {},
   timerValue: {},
   codeInput: {
-    width: 82,
+    width: 48,
     height: 48,
     borderRadius: 10,
-    
     textAlign: 'center',
     textAlignVertical: 'center',
     marginBottom: 20,
   },
+  resendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+  },
+  resendLabel: {},
+  resendLink: {},
 });

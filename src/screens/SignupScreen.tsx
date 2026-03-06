@@ -14,6 +14,8 @@ import AuthSeparator from '../components/AuthSeparator'
 import GoogleIcon from '../assets/svgs/GoogleIcon'
 import AppleIcon from '../assets/svgs/AppleIcon'
 import { RootStackParamList } from '../navigations/RootNavigation'
+import { supabase } from '../lib/supabase'
+import { API_BASE_URL } from '../lib/api/client'
 
 const SignupScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
@@ -28,12 +30,58 @@ const SignupScreen = () => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
-  const handleSignUp = () => {
-    navigation.navigate('VerificationCodeScreen', {
-      email: email || undefined,
-      ...(role && { role }),
-    })
+  const handleSignUp = async () => {
+    if (loading) return
+    setError('')
+    const trimmedEmail = email.trim()
+    if (!trimmedEmail) {
+      setError('Please enter your email.')
+      return
+    }
+    if (!password) {
+      setError('Please enter a password.')
+      return
+    }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters.')
+      return
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.')
+      return
+    }
+
+    setLoading(true)
+    try {
+      const { error: signUpError } = await supabase.auth.signUp({
+        email: trimmedEmail,
+        password,
+      })
+      if (signUpError) {
+        setError(signUpError.message ?? 'Sign up failed. Please try again.')
+        return
+      }
+      const res = await fetch(`${API_BASE_URL}/auth/send-signup-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: trimmedEmail }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok && body?.error) {
+        setError(body.error)
+        return
+      }
+      navigation.navigate('VerificationCodeScreen', {
+        email: trimmedEmail,
+        context: 'signup',
+        ...(role && { role }),
+      })
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -96,9 +144,23 @@ const SignupScreen = () => {
             showPasswordToggle
           />
 </View>
+          {error ? (
+            <Text
+              style={[
+                styles.errorText,
+                {
+                  color: '#dc2626',
+                  fontFamily: fontFamilies.inter,
+                  fontSize: fonts.subhead,
+                },
+              ]}
+            >
+              {error}
+            </Text>
+          ) : null}
           <View style={styles.signUpBtn}>
             <ContinueButton
-              label="Sign up"
+              label={loading ? 'Signing up...' : 'Sign up'}
               onPress={handleSignUp}
               isDark={isDark}
             />
@@ -215,5 +277,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 20,
+  },
+  errorText: {
+    marginTop: 12,
+    textAlign: 'center',
   },
 })

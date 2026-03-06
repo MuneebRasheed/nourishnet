@@ -1,10 +1,5 @@
-import React, { useState } from 'react'
-import {
-  StyleSheet,
-  Text,
-  View,
-  ScrollView,
-} from 'react-native'
+import React, { useState, useEffect } from 'react'
+import { StyleSheet, Text, View, ScrollView } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useThemeStore } from '../../store/themeStore'
 import { getColors, palette } from '../../utils/colors'
@@ -18,6 +13,9 @@ import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack'
 import { RootStackParamList } from '../navigations/RootNavigation'
 import { useAuthStore } from '../../store/authStore'
+import { supabase } from '../lib/supabase'
+import { pickImage, uploadAvatar } from '../lib/uploadAvatar'
+import { fetchProfile } from '../lib/profile'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EditProfileScreen'>
 
@@ -28,21 +26,104 @@ const EditProfileScreen = ({ route }: Props) => {
   const fonts = useAppFontSizes()
   const insets = useSafeAreaInsets()
 
-  const { email: emailFromRoute = '', otp } = route.params ?? {}
+  const { email: emailFromRoute = '' } = route.params ?? {}
+  const profile = useAuthStore((s) => s.profile)
   const [fullName, setFullName] = useState('')
   const [address, setAddress] = useState('')
   const [profileImageUri, setProfileImageUri] = useState<string | null>(null)
-
-  const handleUploadPhoto = () => {
-    // TODO: integrate expo-image-picker or similar
-  }
+  const [profileImageBase64, setProfileImageBase64] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
-  const setUserRole = useAuthStore((s) => s.setUserRole)
+  const setProfile = useAuthStore((s) => s.setProfile)
 
-  const handleCompleteProfile = () => {
-    setUserRole('recipient')
-    navigation.replace('MainTabs', { screen: 'Home' })
-    // TODO: submit profile to API
+  useEffect(() => {
+    const load = async (p: typeof profile) => {
+      if (p && p.role === 'recipient') {
+        if (p.full_name) setFullName(p.full_name)
+        if (p.address) setAddress(p.address)
+        if (p.avatar_url) setProfileImageUri(p.avatar_url)
+        return
+      }
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user && !p) {
+        const fetched = await fetchProfile(user.id)
+        if (fetched && fetched.role === 'recipient') {
+          setProfile(fetched)
+          if (fetched.full_name) setFullName(fetched.full_name)
+          if (fetched.address) setAddress(fetched.address)
+          if (fetched.avatar_url) setProfileImageUri(fetched.avatar_url)
+        }
+      }
+    }
+    load(profile)
+  }, [profile?.id])
+
+  const handleUploadPhoto = async () => {
+    const result = await pickImage()
+    if (result) {
+      setProfileImageUri(result.uri)
+      setProfileImageBase64(result.base64)
+    }
+  }
+
+  const handleCompleteProfile = async () => {
+    if (submitting) return
+    if (!fullName.trim()) {
+      setError('Full name is required.')
+      return
+    }
+    if (!address.trim()) {
+      setError('Address is required.')
+      return
+    }
+    setError('')
+    setSubmitting(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        setError('You must be signed in to complete your profile.')
+        return
+      }
+      let avatarUrl: string | null = profile?.avatar_url ?? null
+      if (profileImageBase64) {
+        const uploaded = await uploadAvatar(user.id, profileImageBase64)
+        if (uploaded) avatarUrl = uploaded
+      }
+      const emailValue = emailFromRoute || profile?.email || user.email || ''
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          role: 'recipient',
+          email: emailValue,
+          full_name: fullName.trim(),
+          address: address.trim(),
+          avatar_url: avatarUrl,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', user.id)
+      if (updateError) {
+        setError(updateError.message ?? 'Failed to save profile.')
+        return
+      }
+      setProfile({
+        id: user.id,
+        role: 'recipient',
+        email: emailValue || null,
+        full_name: fullName.trim(),
+        avatar_url: avatarUrl,
+        address: address.trim(),
+        phone: null,
+        business_name: null,
+        business_address: null,
+        categories: [],
+      })
+      navigation.replace('MainTabs', { screen: 'Home' })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -94,7 +175,6 @@ const EditProfileScreen = ({ route }: Props) => {
             onPress={handleUploadPhoto}
           />
           </View>
-         
 
           <View style={styles.form}>
             <AuthInput
@@ -108,7 +188,7 @@ const EditProfileScreen = ({ route }: Props) => {
               type="email"
               label="Email Address"
               placeholder="yo@email.com"
-              value={emailFromRoute}
+              value={(emailFromRoute || profile?.email) ?? ''}
               editable={false}
               placeholderTextColor={palette.timerIconColor}
               inputFieldBg={isDark ? colors.requestBtnBg : colors.inputFieldBg}
@@ -131,10 +211,14 @@ const EditProfileScreen = ({ route }: Props) => {
             />
           </View>
 
+          {error ? (
+            <Text style={[styles.errorText, { color: '#dc2626', fontFamily: fontFamilies.inter, fontSize: fonts.subhead }]}>
+              {error}
+            </Text>
+          ) : null}
           <View style={styles.buttonWrap}>
-
             <ContinueButton
-              label="Complete Profile"
+              label={submitting ? 'Saving...' : 'Complete Profile'}
               onPress={handleCompleteProfile}
               isDark={isDark}
             />
@@ -181,6 +265,10 @@ const styles = StyleSheet.create({
   form: {
     marginBottom: 20,
     marginTop: 15,
+  },
+  errorText: {
+    marginTop: 8,
+    marginBottom: 4,
   },
   buttonWrap: {
     marginBottom: 16,

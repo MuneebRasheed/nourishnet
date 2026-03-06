@@ -16,6 +16,8 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { RootStackParamList } from '../navigations/RootNavigation'
 import { useAuthStore } from '../../store/authStore'
+import { supabase } from '../lib/supabase'
+import { pickImage, uploadAvatar } from '../lib/uploadAvatar'
 
 const FOOD_CATEGORY_OPTIONS = [
   'Prepared Meals',
@@ -42,19 +44,83 @@ export default function ProviderProfileScreen() {
   const [phone, setPhone] = useState('')
   const [phoneFormatted, setPhoneFormatted] = useState('')
   const [profileImageUri, setProfileImageUri] = useState<string | null>(null)
+  const [profileImageBase64, setProfileImageBase64] = useState<string | null>(null)
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
   const phoneInputRef = useRef<PhoneInput>(null)
 
-  const handleUploadPhoto = () => {
-    // TODO: integrate expo-image-picker or similar
+  const setProfile = useAuthStore((s) => s.setProfile)
+
+  const handleUploadPhoto = async () => {
+    const result = await pickImage()
+    if (result) {
+      setProfileImageUri(result.uri)
+      setProfileImageBase64(result.base64)
+    }
   }
 
-  const setUserRole = useAuthStore((s) => s.setUserRole)
-
-  const handleCompleteProfile = () => {
-    setUserRole('provider')
-    navigation.replace('MainTabs')
-    // TODO: submit provider profile
+  const handleCompleteProfile = async () => {
+    if (submitting) return
+    if (!businessName.trim()) {
+      setError('Business name is required.')
+      return
+    }
+    if (!businessAddress.trim()) {
+      setError('Business address is required.')
+      return
+    }
+    if (!phoneFormatted.trim() && !phone.trim()) {
+      setError('Phone number is required.')
+      return
+    }
+    setError('')
+    setSubmitting(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        setError('You must be signed in to complete your profile.')
+        return
+      }
+      let avatarUrl: string | null = null
+      if (profileImageBase64) {
+        avatarUrl = await uploadAvatar(user.id, profileImageBase64)
+      }
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          role: 'provider',
+          email: emailFromRoute || user.email,
+          business_name: businessName.trim(),
+          business_address: businessAddress.trim(),
+          phone: phoneFormatted.trim() || phone.trim(),
+          categories: selectedCategories,
+          avatar_url: avatarUrl,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', user.id)
+      if (updateError) {
+        setError(updateError.message ?? 'Failed to save profile.')
+        return
+      }
+      setProfile({
+        id: user.id,
+        role: 'provider',
+        email: (emailFromRoute || user.email) ?? null,
+        full_name: null,
+        avatar_url: avatarUrl,
+        address: null,
+        phone: phoneFormatted.trim() || phone.trim() || null,
+        business_name: businessName.trim(),
+        business_address: businessAddress.trim(),
+        categories: selectedCategories,
+      })
+      navigation.replace('MainTabs')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -113,7 +179,7 @@ export default function ProviderProfileScreen() {
               label="Business Name*"
               placeholder="Enter here"
               value={businessName}
-              
+              onChangeText={setBusinessName}
             />
             <AuthInput
               type="email"
@@ -222,9 +288,14 @@ export default function ProviderProfileScreen() {
             />
           </View>
 
+          {error ? (
+            <Text style={[styles.errorText, { color: '#dc2626', fontFamily: fontFamilies.inter, fontSize: fonts.subhead }]}>
+              {error}
+            </Text>
+          ) : null}
           <View style={styles.buttonWrap}>
             <ContinueButton
-              label="Complete Profile"
+              label={submitting ? 'Saving...' : 'Complete Profile'}
               onPress={handleCompleteProfile}
               isDark={isDark}
             />
@@ -308,6 +379,10 @@ const styles = StyleSheet.create({
   buttonWrap: {
     marginTop: 24,
     marginBottom: 16,
+  },
+  errorText: {
+    marginTop: 8,
+    marginBottom: 4,
   },
   disclaimer: {
     textAlign: 'center',

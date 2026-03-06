@@ -22,6 +22,7 @@ import ProviderProfileScreen from '../screens/ProviderProfileScreen';
 
 import SubscriptionManagementScreen from '../screens/SubscriptionManagementScreen';
 import ChangePasswordScreen from '../screens/ChangePasswordScreen';
+import CreateNewPasswordScreen from '../screens/CreateNewPasswordScreen';
 import TermsAndConditionsScreen from '../screens/TermsAndConditionsScreen';
 import PrivacyPolicyScreen from '../screens/PrivacyPolicyScreen';
 
@@ -33,12 +34,12 @@ export type RootStackParamList = {
   OnBoardingScreen: undefined;
   LoginScreen: { role?: AuthRole } | undefined;
   SignupScreen: { role?: AuthRole } | undefined;
-  VerificationCodeScreen: { email?: string; role?: AuthRole };
+  VerificationCodeScreen: { email?: string; role?: AuthRole; context?: 'signup' | 'forgot-password' };
   EditProfileScreen: { email?: string; otp?: string };
   ProviderProfileScreen: { email?: string; otp?: string };
+  CreateNewPasswordScreen: { email: string; otp: string };
   SelectRoleScreen: undefined;
   ReceiptOnBoardScreen: { role?: AuthRole } | undefined;
-  CreateNewPasswordScreen?: { email: string; otp: string };
   ThemeFontTestScreen: undefined;
   ThemeScreen: undefined;
   NotificationsScreen: undefined;
@@ -101,6 +102,11 @@ function RootNavigation() {
       <Stack.Screen
         name="ProviderProfileScreen"
         component={ProviderProfileScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="CreateNewPasswordScreen"
+        component={CreateNewPasswordScreen}
         options={{ headerShown: false }}
       />
       <Stack.Screen

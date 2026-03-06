@@ -11,8 +11,10 @@ import {
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, CommonActions } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { supabase } from '../lib/supabase';
+import { getDisplayName, getAvatarLetter } from '../lib/profile';
 import { useThemeStore, useResolvedIsDark } from '../../store/themeStore';
 import { useSettingsStore } from '../../store/settingStore';
 import { useAuthStore } from '../../store/authStore';
@@ -45,6 +47,8 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const userRole = useAuthStore((s) => s.userRole);
+  const profile = useAuthStore((s) => s.profile);
+  const clearAuth = useAuthStore((s) => s.clearAuth);
   const largeFont = useSettingsStore((s) => s.largeFont);
   const setLargeFont = useSettingsStore((s) => s.setLargeFont);
   const isProvider = userRole === 'provider';
@@ -59,8 +63,15 @@ export default function SettingsScreen() {
     navigation.navigate('EditProfileScreen', {});
   };
 
-  const handleLogout = () => {
-    // TODO: clear auth state and navigate to Login
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    clearAuth();
+    navigation.dispatch(
+      CommonActions.reset({
+        index: 0,
+        routes: [{ name: 'OnBoardingScreen' }],
+      })
+    );
   };
 
   const handleSubscriptionManagement = () => {
@@ -93,9 +104,10 @@ export default function SettingsScreen() {
    
 
         <SettingsProfileCard
-          displayName="Salman Ahmad"
+          displayName={getDisplayName(profile) || 'User'}
           subtitle="4-day streak"
-          avatarLetter="A"
+          avatarLetter={getAvatarLetter(profile)}
+          avatarSource={profile?.avatar_url ? { uri: profile.avatar_url } : undefined}
           onEditPress={handleEditProfile}
           showPremium={isProvider}
         />

@@ -13,6 +13,10 @@ import AuthSeparator from '../components/AuthSeparator'
 import GoogleIcon from '../assets/svgs/GoogleIcon'
 import AppleIcon from '../assets/svgs/AppleIcon'
 import { RootStackParamList } from '../navigations/RootNavigation'
+import { supabase } from '../lib/supabase'
+import { API_BASE_URL } from '../lib/api/client'
+import { useAuthStore } from '../../store/authStore'
+import { fetchProfile } from '../lib/profile'
 
 const LoginScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
@@ -24,10 +28,70 @@ const LoginScreen = () => {
   const fonts = useAppFontSizes()
 
   const [mode, setMode] = useState<'email' | 'phone'>('email')
-  const [email, setEmail] = useState('sai@gmail.com')
+  const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
-  
-  const [password, setPassword] = useState('Sai@1234')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [forgotLoading, setForgotLoading] = useState(false)
+  const [error, setError] = useState('')
+  const setAuth = useAuthStore((s) => s.setAuth)
+
+  const handleForgotPassword = async () => {
+    const trimmedEmail = email.trim()
+    if (!trimmedEmail) {
+      setError('Please enter your email to reset password.')
+      return
+    }
+    if (forgotLoading) return
+    setError('')
+    setForgotLoading(true)
+    try {
+      await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: trimmedEmail }),
+      })
+      navigation.navigate('VerificationCodeScreen', {
+        email: trimmedEmail,
+        context: 'forgot-password',
+      })
+    } finally {
+      setForgotLoading(false)
+    }
+  }
+
+  const handleSignIn = async () => {
+    if (loading) return
+    setError('')
+    const trimmedEmail = email.trim()
+    if (!trimmedEmail) {
+      setError('Please enter your email.')
+      return
+    }
+    if (!password) {
+      setError('Please enter your password.')
+      return
+    }
+    setLoading(true)
+    try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: trimmedEmail,
+        password,
+      })
+      if (signInError) {
+        setError(signInError.message ?? 'Sign in failed. Please try again.')
+        return
+      }
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const profile = await fetchProfile(user.id)
+        setAuth(profile?.role ?? null, profile ?? null)
+      }
+      navigation.replace('MainTabs')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -117,26 +181,34 @@ const LoginScreen = () => {
           showPasswordToggle
         />
         </View>
+        {error ? (
+          <Text
+            style={[
+              styles.errorText,
+              {
+                color: '#dc2626',
+                fontFamily: fontFamilies.inter,
+                fontSize: fonts.subhead,
+              },
+            ]}
+          >
+            {error}
+          </Text>
+        ) : null}
         <Pressable
-          style={{ marginTop: -8 }}
-          onPress={() => navigation.navigate('VerificationCodeScreen', { email })}
+          style={{ marginTop: error ? 4 : -8 }}
+          onPress={handleForgotPassword}
         >
           <Text style={{ color: colors.primary, fontFamily: fontFamilies.interMedium, fontSize: fonts.caption }}>
-            Forgot Password?
+            {forgotLoading ? 'Sending code...' : 'Forgot Password?'}
           </Text>
         </Pressable>
 
        
 <View style={{marginTop:30}}>
 <ContinueButton
-          label="Sign In"
-          onPress={() => {
-            if (role) {
-              navigation.navigate('VerificationCodeScreen', { email, role })
-            } else {
-              navigation.navigate('MainTabs')
-            }
-          }}
+          label={loading ? 'Signing in...' : 'Sign In'}
+          onPress={handleSignIn}
           isDark={isDark}
         />
 </View>
@@ -276,5 +348,8 @@ const styles = StyleSheet.create({
   welcomeText:{
     marginTop:20
   },
-  
+  errorText: {
+    marginTop: 12,
+    textAlign: 'center',
+  },
 })

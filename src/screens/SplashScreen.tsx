@@ -10,38 +10,56 @@ import { useAppFontSizes } from '../../theme/fonts';
 import { fontFamilies } from '../../theme/typography';
 import { RootStackParamList } from '../navigations/RootNavigation';
 import SplashIcon from '../assets/svgs/SplashIcon';
+import { supabase } from '../lib/supabase';
+import { fetchProfile } from '../lib/profile';
 
 /** Delay so persisted auth has time to rehydrate from AsyncStorage. */
 const REHYDRATE_DELAY_MS = 800;
 
 /**
- * Flow: Splash → Onboarding (if no role) → SelectRole → Provider onboarding (FoodOnBoard) or Recipient onboarding (ReceiptOnBoard) → Login → MainTabs.
- * If user already has role (provider/recipient), go straight to MainTabs (provider flow = 4 tabs, recipient flow = 5 tabs).
+ * Flow: Splash → check Supabase session →
+ *   If session: load profile, set in Zustand, → MainTabs (dashboard).
+ *   Else: OnBoardingScreen → SelectRole → Login/Signup → MainTabs.
+ * User stays logged in until logout or delete account (session persisted in AsyncStorage).
  */
 const SplashScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const theme = useThemeStore((state) => state.theme);
-  const userRole = useAuthStore((state) => state.userRole);
+  const setAuth = useAuthStore((state) => state.setAuth);
   const isDark = theme === 'dark';
   const colors: AppColors = getColors(isDark);
   const fontSizes = useAppFontSizes();
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (userRole === 'provider' || userRole === 'recipient') {
-        navigation.replace('OnBoardingScreen');
+    let cancelled = false;
+    const run = async () => {
+      await new Promise((r) => setTimeout(r, REHYDRATE_DELAY_MS));
+      if (cancelled) return;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (cancelled) return;
+      if (session?.user) {
+        const profile = await fetchProfile(session.user.id);
+        if (cancelled) return;
+        if (profile) {
+          setAuth(profile.role ?? null, profile);
+        } else {
+          setAuth(null, null);
+        }
+        navigation.replace('MainTabs');
       } else {
+        setAuth(null, null);
         navigation.replace('OnBoardingScreen');
       }
-    }, REHYDRATE_DELAY_MS);
-
-    return () => clearTimeout(timer);
-  }, [navigation, userRole]);
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [navigation, setAuth]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <SplashIcon width={115} height={108} />
-
       <View style={styles.doubleText}>
         <Text
           style={[
@@ -59,7 +77,7 @@ const SplashScreen = () => {
           style={[
             styles.tagline,
             {
-              color: colors.textSecondary, 
+              color: colors.textSecondary,
               fontSize: fontSizes.subhead,
               fontFamily: fontFamilies.inter,
             },
@@ -68,8 +86,6 @@ const SplashScreen = () => {
           Nourishing communities, together.
         </Text>
       </View>
-
-    
     </View>
   );
 };
@@ -88,7 +104,7 @@ const styles = StyleSheet.create({
   },
   title: {
     textAlign: 'center',
-    marginBottom: 5, // spacing between title and tagline
+    marginBottom: 5,
   },
   tagline: {
     textAlign: 'center',
