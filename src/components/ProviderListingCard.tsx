@@ -3,6 +3,7 @@ import {
   Image,
   ImageSourcePropType,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -10,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import EditIcon from '../assets/svgs/EditIcon';
 import { useThemeStore } from '../../store/themeStore';
 import { getColors, palette } from '../../utils/colors';
 import { useAppFontSizes } from '../../theme/fonts';
@@ -48,8 +50,8 @@ export function ProviderListingCard({
   onDelete,
 }: ProviderListingCardProps) {
   const [menuVisible, setMenuVisible] = useState(false);
-  const [menuLayout, setMenuLayout] = useState({ x: 0, y: 0, width: 0 });
-  const statusRowRef = useRef<View>(null);
+  const [menuLayout, setMenuLayout] = useState({ x: 0, y: 0, triggerWidth: 0 });
+  const threeDotRef = useRef<View>(null);
   const theme = useThemeStore((s) => s.theme);
   const isDark = theme === 'dark';
   const colors = getColors(isDark);
@@ -58,10 +60,15 @@ export function ProviderListingCard({
   const cardBg = isDark ? colors.inputFieldBg : palette.white;
   const borderColor = colors.borderColor;
 
-  const showMenu = (onEdit != null || onDelete != null) && menuVisible;
+  const MENU_WIDTH = 140;
+
   const openMenu = () => {
-    statusRowRef.current?.measureInWindow((x, y, width, height) => {
-      setMenuLayout({ x, y: y + height + 4, width: Math.max(width, 140) });
+    threeDotRef.current?.measureInWindow((x, y, width, height) => {
+      setMenuLayout({
+        x,
+        y: y + height + 10,
+        triggerWidth: width,
+      });
       setMenuVisible(true);
     });
   };
@@ -97,7 +104,7 @@ export function ProviderListingCard({
             >
               {title}
             </Text>
-            <View ref={statusRowRef} style={styles.statusRow} collapsable={false}>
+            <View style={styles.statusRow}>
               <View
                 style={[
                   styles.statusPill,
@@ -114,50 +121,54 @@ export function ProviderListingCard({
                 </Text>
               </View>
               {(onEdit != null || onDelete != null) && (
-                <TouchableOpacity
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  onPress={openMenu}
-                  style={styles.threeDotBtn}
-                >
-                  <Ionicons name="ellipsis-vertical" size={20} color={colors.text} />
-                </TouchableOpacity>
+                <View ref={threeDotRef} collapsable={false}>
+                  <TouchableOpacity
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    onPress={openMenu}
+                    style={styles.threeDotBtn}
+                  >
+                    <Ionicons name="ellipsis-vertical" size={20} color={colors.text} />
+                  </TouchableOpacity>
+                </View>
               )}
             </View>
           </View>
 
           <Modal
-            visible={showMenu}
+            visible={menuVisible}
             transparent
             animationType="fade"
             onRequestClose={closeMenu}
           >
-            <Pressable style={styles.menuBackdrop} onPress={closeMenu}>
+            <Pressable style={styles.modalOverlay} onPress={closeMenu}>
               <View
                 style={[
-                  styles.menuModal,
+                  styles.modalMenu,
+                  styles.modalMenuPositioned,
+                  styles.modalMenuShadow,
                   {
-                    left: menuLayout.x,
-                    top: menuLayout.y,
-                    width: menuLayout.width,
-                    backgroundColor: isDark ? colors.inputFieldBg : palette.white,
+                    backgroundColor: isDark ? "rgba(255, 255, 255, 0.6)" : "rgba(255, 255, 255, 0.6)",
                     borderColor: colors.borderColor,
+                    top: menuLayout.y,
+                    left: Math.max(12, menuLayout.x + menuLayout.triggerWidth - MENU_WIDTH),
+                    width: MENU_WIDTH,
                   },
                 ]}
                 onStartShouldSetResponder={() => true}
               >
                 {onEdit != null && (
-                  <TouchableOpacity style={styles.menuModalItem} onPress={handleEdit} activeOpacity={0.7}>
-                    <Ionicons name="pencil-outline" size={20} color={colors.text} />
-                    <Text style={[styles.menuModalItemText, { color: colors.text, fontFamily: fontFamilies.interMedium, fontSize: fonts.subhead }]}>
+                  <TouchableOpacity style={styles.menuItemRow} onPress={handleEdit} activeOpacity={0.7}>
+                    <EditIcon width={18} height={18} color={colors.text} />
+                    <Text style={[styles.menuItemText, { color: colors.text, fontFamily: fontFamilies.interMedium, fontSize: fonts.caption }]}>
                       Edit
                     </Text>
                   </TouchableOpacity>
                 )}
                 {onEdit != null && onDelete != null && <View style={[styles.menuDivider, { backgroundColor: colors.borderColor }]} />}
                 {onDelete != null && (
-                  <TouchableOpacity style={styles.menuModalItem} onPress={handleDelete} activeOpacity={0.7}>
-                    <Ionicons name="trash-outline" size={20} color={palette.logoutColor} />
-                    <Text style={[styles.menuModalItemText, { color: palette.logoutColor, fontFamily: fontFamilies.interMedium, fontSize: fonts.subhead }]}>
+                  <TouchableOpacity style={styles.menuItemRow} onPress={handleDelete} activeOpacity={0.7}>
+                    <Ionicons name="trash-outline" size={18} color={palette.logoutColor} />
+                    <Text style={[styles.menuItemText, { color: palette.logoutColor, fontFamily: fontFamilies.interMedium, fontSize: fonts.caption }]}>
                       Delete
                     </Text>
                   </TouchableOpacity>
@@ -312,7 +323,7 @@ const styles = StyleSheet.create({
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 12,
   },
   statusPill: {
     paddingHorizontal: 10,
@@ -324,34 +335,48 @@ const styles = StyleSheet.create({
     padding: 4,
     margin: -4,
   },
-  menuBackdrop: {
+  modalOverlay: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  menuModal: {
-    position: 'absolute',
+  modalMenu: {
+    flexDirection: 'column',
+    paddingVertical: 1,
+    paddingHorizontal: 1,
     borderRadius: 12,
     borderWidth: 1,
-    paddingVertical: 4,
-    minWidth: 140,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 4,
   },
-  menuModalItem: {
+  modalMenuPositioned: {
+    position: 'absolute',
+  },
+  modalMenuShadow: {
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
+  },
+  menuItemRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    gap: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
   },
-  menuModalItemText: {},
   menuDivider: {
-    height: 1,
-    marginHorizontal: 8,
+    height: 2,
+    // marginVertical: 2,
+    marginHorizontal: 10,
   },
+  menuItemText: {},
   metaRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
