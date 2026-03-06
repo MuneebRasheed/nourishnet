@@ -31,6 +31,10 @@ export type FoodDetailItem = FoodCardData & {
   pickupTimeNote?: string;
   pickupInstructions?: string;
   quantity?: number;
+  /** Allergens declared by provider (e.g. Gluten, Dairy) */
+  allergens?: string[];
+  /** Food type from post (e.g. Produce, Baked Goods) */
+  foodType?: string;
   /** Optional provider avatar image; when absent, first letter of source is shown */
   providerImage?: ImageSourcePropType;
 };
@@ -70,8 +74,8 @@ function FoodDetailScreen() {
   }
 
   const quantityNum = item.quantity ?? (parseInt(item.portions.replace(/\D/g, ''), 10) || 0);
-  const locationPrimary = item.distance;
-  const locationSecondary = item.pickupAddress;
+  const locationPrimary = item.pickupAddress || item.distance;
+  const locationSecondary = item.pickupAddress ? item.distance : undefined;
   const timePrimary = item.timeSlot;
   const timeSecondary = item.pickupTimeNote;
 
@@ -148,6 +152,22 @@ function FoodDetailScreen() {
             />
           </View>
 
+          {item.foodType != null && item.foodType !== '' && (
+            <View style={styles.section}>
+              <Text
+                style={[
+                  styles.sectionTitle,
+                  { color: colors.text, fontFamily: fontFamilies.interBold, fontSize: fonts.subhead },
+                ]}
+              >
+                Food Type
+              </Text>
+              <Text style={[styles.foodTypeText, { color: colors.text, fontFamily: fontFamilies.inter, fontSize: fonts.body }]}>
+                {item.foodType}
+              </Text>
+            </View>
+          )}
+
           <View style={styles.section}>
             <Text
               style={[
@@ -177,33 +197,53 @@ function FoodDetailScreen() {
                   { color: colors.text, fontFamily: fontFamilies.interBold, fontSize: fonts.body },
                 ]}
               >
+                Dietary Tags
+              </Text>
+              <View style={styles.tagsRow}>
+                {item.dietaryTags.map((tag) => (
+                  <View key={tag} style={[styles.dietaryTag, { backgroundColor: isDark ? colors.inputFieldBg : palette.roleCard }]}>
+                    <Text style={[styles.dietaryTagText, { color: colors.text, fontFamily: fontFamilies.interMedium, fontSize: fonts.caption }]}>
+                      {tag}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {item.allergens && item.allergens.length > 0 && (
+            <View style={styles.section}>
+              <Text
+                style={[
+                  styles.sectionTitle,
+                  { color: colors.text, fontFamily: fontFamilies.interBold, fontSize: fonts.body },
+                ]}
+              >
                 Allergen Information
               </Text>
-              <View style={[styles.allergenCard, { backgroundColor:isDark ? colors.inputFieldBg : palette.roleCardbg ,borderColor: isDark ? palette.glutenColor : "transparent", borderWidth: 1}]}>
+              <View style={[styles.allergenCard, { backgroundColor: isDark ? colors.inputFieldBg : palette.roleCardbg, borderColor: isDark ? palette.glutenColor : 'transparent', borderWidth: 1 }]}>
                 <View style={styles.allergenHeader}>
                   <View style={styles.allergenIconWrap}>
-                  <Ionicons name="alert-circle-outline" size={20} color={isDark ? palette.roleBulbColor3 : palette.roleBulbColor1} />
-                  
-                  <Text 
-                    style={[
-                      styles.allergenTitle,
-                      { color: isDark ? palette.roleBulbColor3 : palette.roleBulbColor1, fontFamily: fontFamilies.interSemiBold, fontSize: fonts.caption },
-                    ]}
-                  >
-                    Contains allergens 
-                  </Text>
+                    <Ionicons name="alert-circle-outline" size={20} color={isDark ? palette.roleBulbColor3 : palette.roleBulbColor1} />
+                    <Text
+                      style={[
+                        styles.allergenTitle,
+                        { color: isDark ? palette.roleBulbColor3 : palette.roleBulbColor1, fontFamily: fontFamilies.interSemiBold, fontSize: fonts.caption },
+                      ]}
+                    >
+                      Contains allergens
+                    </Text>
                   </View>
                   <View style={styles.allergenTags}>
-                  {item.dietaryTags.map((tag) => (
-                    <View key={tag} style={[styles.allergenTag, { backgroundColor: palette.glutenColor, }]}>
-                      <Text style={[styles.allergenTagText, { color: isDark ? palette.roleBulbColor3 : palette.roleBulbColor1, fontFamily: fontFamilies.interMedium, fontSize: fonts.caption }]}>
-                        {tag}
-                      </Text>
-                    </View>
-                  ))}
+                    {item.allergens.map((tag) => (
+                      <View key={tag} style={[styles.allergenTag, { backgroundColor: palette.glutenColor }]}>
+                        <Text style={[styles.allergenTagText, { color: isDark ? palette.roleBulbColor3 : palette.roleBulbColor1, fontFamily: fontFamilies.interMedium, fontSize: fonts.caption }]}>
+                          {tag}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
                 </View>
-                </View>
-              
               </View>
             </View>
           )}
@@ -368,6 +408,20 @@ const styles = StyleSheet.create({
   sectionTitle: {
     marginBottom: 12,
   },
+  foodTypeText: {
+    marginBottom: 4,
+  },
+  tagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  dietaryTag: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 100,
+  },
+  dietaryTagText: {},
   quantityRow: {
     flexDirection: 'row',
     alignItems: 'center',

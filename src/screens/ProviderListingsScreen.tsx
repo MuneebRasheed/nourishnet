@@ -1,10 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import {
+  Alert,
   StyleSheet,
   Text,
   View,
   ScrollView,
-  ImageSourcePropType,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
@@ -37,6 +37,7 @@ export default function ProviderListingsScreen() {
   const fonts = useAppFontSizes();
   const insets = useSafeAreaInsets();
   const allListings = useProviderListingsStore((s) => s.listings);
+  const removeListing = useProviderListingsStore((s) => s.removeListing);
   const [activeTab, setActiveTab] = useState<ActiveCompletedTab>('Active');
   type ListingsNav = NativeStackNavigationProp<ListingsStackParamList, 'ProviderListingsScreen'>;
 type RootNav = NativeStackNavigationProp<RootStackParamList, keyof RootStackParamList>;
@@ -59,6 +60,22 @@ const navigation = useNavigation<CompositeNavigationProp<ListingsNav, RootNav>>(
       listingId: listing.id,
       listingTitle: listing.title || 'Food name',
     });
+  };
+
+  const handleEditListing = (listing: ProviderListing) => {
+    // TODO: navigate to edit flow with listing data
+    navigation.navigate('PostFoodScreen');
+  };
+
+  const handleDeleteListing = (listing: ProviderListing) => {
+    Alert.alert(
+      'Delete listing',
+      `Remove "${listing.title || 'this listing'}"? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => removeListing(listing.id) },
+      ]
+    );
   };
 
   const emptyTitle =
@@ -151,9 +168,12 @@ const navigation = useNavigation<CompositeNavigationProp<ListingsNav, RootNav>>(
                 }
                 timeRangeLabel={`${listing.startTime} - ${listing.endTime}`}
                 address={listing.pickupAddress}
+                foodType={listing.foodType}
                 statusLabel={listing.status === 'active' ? 'Active' : 'Completed'}
                 statusColor={listing.status === 'active' ? palette.roleBulbColor2 : colors.textSecondary}
                 onPressViewRequests={() => handleViewRequests(listing)}
+                onEdit={() => handleEditListing(listing)}
+                onDelete={() => handleDeleteListing(listing)}
               />
             ))
           )}

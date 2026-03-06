@@ -61,6 +61,7 @@ const SelectRoleScreen = () => {
             Choose your role to get started
           </Text>
 
+          {/* Two flows: provider (FoodOnBoard → Login → MainTabs provider tabs) and recipient (ReceiptOnBoard → Login → MainTabs recipient tabs) */}
           <View style={styles.cards}>
             <RoleCard
               title="Food Provider"

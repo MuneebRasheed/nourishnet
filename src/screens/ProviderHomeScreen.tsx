@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import {
+  Alert,
   StyleSheet,
   Text,
   View,
@@ -20,7 +21,9 @@ import ContinueButton from '../components/ContinueButton';
 import { ProviderImpactStatCard, ProviderImpactStatsRow } from '../components/ProviderImpactStats';
 import { ProviderQuickActionButton, ProviderQuickActionsRow } from '../components/ProviderQuickActionButton';
 import { ProviderListingCard } from '../components/ProviderListingCard';
-import { useProviderListingsStore } from '../../store/providerListingsStore';
+import { useProviderListingsStore, type ProviderListing } from '../../store/providerListingsStore';
+import { useAuthStore } from '../../store/authStore';
+import { getDisplayName } from '../lib/profile';
 import { Ionicons } from '@expo/vector-icons';
 import ForkKnife from '../assets/svgs/ForkKnife';
 import CheckMarkHeart from '../assets/svgs/CheckMarkHeart';
@@ -29,7 +32,6 @@ import ThreelinesIcon from '../assets/svgs/ThreelinesIcon';
 
 const defaultAvatar = require('../assets/images/Avatar.png');
 
-const PROVIDER_NAME = 'Salman Ahmad';
 const NOTIFICATION_COUNT = 2;
 
 export default function ProviderHomeScreen() {
@@ -38,7 +40,9 @@ export default function ProviderHomeScreen() {
   const colors = getColors(isDark);
   const fonts = useAppFontSizes();
   const insets = useSafeAreaInsets();
+  const profile = useAuthStore((s) => s.profile);
   const allListings = useProviderListingsStore((s) => s.listings);
+  const removeListing = useProviderListingsStore((s) => s.removeListing);
   const listings = useMemo(
     () => allListings.filter((l) => l.status === 'active'),
     [allListings]
@@ -60,6 +64,21 @@ export default function ProviderHomeScreen() {
     navigation.navigate('PostFoodScreen');
   };
 
+  const handleEditListing = (_listing: ProviderListing) => {
+    navigation.navigate('PostFoodScreen');
+  };
+
+  const handleDeleteListing = (listing: ProviderListing) => {
+    Alert.alert(
+      'Delete listing',
+      `Remove "${listing.title || 'this listing'}"? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => removeListing(listing.id) },
+      ]
+    );
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView
@@ -72,10 +91,10 @@ export default function ProviderHomeScreen() {
       >
         <View style={styles.content}>
           <HomeHeader
-            userName={PROVIDER_NAME}
+            userName={getDisplayName(profile) || undefined}
             notificationCount={NOTIFICATION_COUNT}
             streakText="4-day streak"
-            avatarSource={defaultAvatar as ImageSourcePropType}
+            avatarSource={profile?.avatar_url ? { uri: profile.avatar_url } : (defaultAvatar as ImageSourcePropType)}
           />
 
           <ContinueButton
@@ -235,8 +254,11 @@ export default function ProviderHomeScreen() {
                 }
                 timeRangeLabel={`${listing.startTime} - ${listing.endTime}`}
                 address={listing.pickupAddress}
+                foodType={listing.foodType}
                 statusLabel={listing.status === 'active' ? 'Active' : 'Completed'}
                 onPressViewRequests={handleViewListings}
+                onEdit={() => handleEditListing(listing)}
+                onDelete={() => handleDeleteListing(listing)}
               />
             ))
           )}

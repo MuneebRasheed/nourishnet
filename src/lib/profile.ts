@@ -3,6 +3,17 @@ import type { Profile } from '../../store/authStore';
 
 const PROFILE_COLUMNS = 'id, role, email, full_name, avatar_url, address, phone, business_name, business_address, categories, created_at, updated_at';
 
+function normalizeRole(role: unknown): Profile['role'] {
+  if (typeof role !== 'string') return null;
+  const v = role.trim().toLowerCase();
+  if (v === 'provider') return 'provider';
+  if (v === 'recipient') return 'recipient';
+  // Common variants (keeps app resilient to older DB values)
+  if (v === 'food_provider' || v === 'food provider') return 'provider';
+  if (v === 'food_recipient' || v === 'food recipient') return 'recipient';
+  return null;
+}
+
 export async function fetchProfile(userId: string): Promise<Profile | null> {
   const { data, error } = await supabase
     .from('profiles')
@@ -12,7 +23,7 @@ export async function fetchProfile(userId: string): Promise<Profile | null> {
   if (error || !data) return null;
   return {
     id: data.id,
-    role: data.role ?? null,
+    role: normalizeRole(data.role),
     email: data.email ?? null,
     full_name: data.full_name ?? null,
     avatar_url: data.avatar_url ?? null,

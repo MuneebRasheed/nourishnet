@@ -79,7 +79,13 @@ export default function SettingsScreen() {
   };
 
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
   const DEACTIVATE_GRACE_DAYS = 30;
+
+  const handleLogoutConfirm = async () => {
+    setShowLogoutModal(false);
+    await handleLogout();
+  };
 
   const handleDeactivateConfirm = () => {
     setShowDeactivateModal(false);
@@ -238,7 +244,7 @@ export default function SettingsScreen() {
 
         <ContinueButton
           label="Logout"
-          onPress={handleLogout}
+          onPress={() => setShowLogoutModal(true)}
           isDark={isDark}
           backgroundColor={colors.inputFieldBg}
           textColor={palette.logoutColor}
@@ -338,6 +344,103 @@ export default function SettingsScreen() {
                   ]}
                 >
                   Deactivate
+                </Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={showLogoutModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowLogoutModal(false)}
+        statusBarTranslucent
+      >
+        <Pressable
+          style={styles.deactivateModalOverlay}
+          onPress={() => setShowLogoutModal(false)}
+        >
+          <View style={styles.deactivateModalBlurContainer} pointerEvents="none">
+            {Platform.OS === 'ios' ? (
+              <BlurView
+                intensity={10}
+                tint={isDark ? 'dark' : 'light'}
+                style={StyleSheet.absoluteFill}
+              />
+            ) : (
+              <View style={[StyleSheet.absoluteFill, styles.deactivateModalAndroidOverlay]} />
+            )}
+            <View style={[StyleSheet.absoluteFill, styles.deactivateModalOverlayBg]} />
+          </View>
+          <Pressable
+            style={[styles.deactivateModalContent, { backgroundColor: colors.inputFieldBg }]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text
+              style={[
+                styles.deactivateModalTitle,
+                {
+                  color: colors.text,
+                  fontFamily: fontFamilies.interBold,
+                  fontSize: fonts.largeTitle,
+                },
+              ]}
+            >
+              Log out
+            </Text>
+            <Text
+              style={[
+                styles.deactivateModalMessage,
+                {
+                  color: colors.textSecondary ?? colors.text,
+                  fontFamily: fontFamilies.inter,
+                  fontSize: fonts.subhead,
+                },
+              ]}
+            >
+              Are you sure you want to log out?
+            </Text>
+            <View style={styles.deactivateModalButtons}>
+              <Pressable
+                style={[
+                  styles.deactivateModalCancelBtn,
+                  {
+                    backgroundColor: palette.white,
+                    borderColor: colors.borderColor,
+                  },
+                ]}
+                onPress={() => setShowLogoutModal(false)}
+              >
+                <Text
+                  style={[
+                    styles.deactivateModalCancelText,
+                    {
+                      color: colors.textSecondary ?? colors.text,
+                      fontFamily: fontFamilies.interSemiBold,
+                      fontSize: fonts.subhead,
+                    },
+                  ]}
+                >
+                  Cancel
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.deactivateModalConfirmBtn, { backgroundColor: palette.logoutColor }]}
+                onPress={handleLogoutConfirm}
+              >
+                <Text
+                  style={[
+                    styles.deactivateModalConfirmText,
+                    {
+                      color: palette.white,
+                      fontFamily: fontFamilies.interSemiBold,
+                      fontSize: fonts.subhead,
+                    },
+                  ]}
+                >
+                  Log out
                 </Text>
               </Pressable>
             </View>

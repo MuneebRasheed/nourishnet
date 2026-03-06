@@ -22,7 +22,7 @@ export type SettingsProfileCardProps = {
 };
 
 export default function SettingsProfileCard({
-  displayName = 'Salman Ahmad',
+  displayName = 'User',
   subtitle = ' 4 days streak',
   avatarLetter = 'A',
   avatarSource = defaultAvatarImage,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, View, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -8,12 +8,46 @@ import { getColors, palette } from '../../utils/colors';
 import { useAppFontSizes } from '../../theme/fonts';
 import { fontFamilies } from '../../theme/typography';
 import { RootStackParamList } from '../navigations/RootNavigation';
+import { useProviderListingsStore, type ProviderListing } from '../../store/providerListingsStore';
 import HomeHeader from '../components/HomeHeader';
 import SearchBarWithFilter from '../components/SearchBarWithFilter';
 import FilterModal from '../components/FilterModal';
 import CategoryChips from '../components/CategoryChips';
 import FoodCard, { FoodCardData } from '../components/FoodCard';
 import type { FoodDetailItem } from './FoodDetailScreen';
+
+const DEFAULT_LISTING_IMAGE = require('../assets/images/FoodOnboard1.png');
+
+function formatPostedAgo(createdAt: string): string {
+  const mins = Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days > 1 ? 's' : ''} ago`;
+}
+
+function providerListingToDetailItem(listing: ProviderListing): FoodDetailItem {
+  return {
+    id: listing.id,
+    image: DEFAULT_LISTING_IMAGE,
+    title: listing.title,
+    source: 'Provider',
+    distance: '—',
+    postedAgo: formatPostedAgo(listing.createdAt),
+    portions: `${listing.quantity} ${listing.quantityUnit}`,
+    timeSlot: `${listing.startTime} - ${listing.endTime}`,
+    dietaryTags: listing.dietaryTags?.length ? listing.dietaryTags : undefined,
+    isLive: true,
+    pickupAddress: listing.pickupAddress,
+    pickupTimeNote: '',
+    pickupInstructions: listing.note || undefined,
+    quantity: parseInt(listing.quantity, 10) || 0,
+    allergens: listing.allergens?.length ? listing.allergens : undefined,
+    foodType: listing.foodType ?? undefined,
+  };
+}
 
 const MOCK_FOOD_LIST: FoodDetailItem[] = [
   {
@@ -66,6 +100,16 @@ export default function HomeScreen() {
   const fonts = useAppFontSizes();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const allListings = useProviderListingsStore((s) => s.listings);
+  const activeListings = useMemo(
+    () => allListings.filter((l) => l.status === 'active'),
+    [allListings]
+  );
+  const listingItems = useMemo(
+    () => activeListings.map(providerListingToDetailItem),
+    [activeListings]
+  );
+  const displayList = listingItems.length > 0 ? listingItems : MOCK_FOOD_LIST;
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('All');
   const [filterModalVisible, setFilterModalVisible] = useState(false);
@@ -104,12 +148,12 @@ export default function HomeScreen() {
             </Text>
             <View style={[styles.availableBadge, { backgroundColor: colors.primary }]}>
               <Text style={[styles.availableText, { fontFamily: fontFamilies.interMedium, fontSize: fonts.caption }]}>
-                3 available
+                {displayList.length} available
               </Text>
             </View>
           </View>
           <View style={styles.cards}>
-            {MOCK_FOOD_LIST.map((item) => (
+            {displayList.map((item) => (
               <FoodCard
                 key={item.id}
                 item={item as FoodCardData}

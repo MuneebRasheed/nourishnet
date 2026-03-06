@@ -1,19 +1,22 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, View, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useThemeStore } from '../../store/themeStore';
-import { getColors } from '../../utils/colors';
+import { getColors, palette } from '../../utils/colors';
 import { useAppFontSizes } from '../../theme/fonts';
 import { fontFamilies } from '../../theme/typography';
 import { RootStackParamList } from '../navigations/RootNavigation';
+import { useProviderListingsStore } from '../../store/providerListingsStore';
 import SettingsHeader from '../components/SettingsHeader';
 import { ActiveCompletedTabs } from '../components/ActiveCompletedTabs';
 import { RequestCard, type ListingRequestItem } from '../components/RequestCard';
 import { VerifyPickupModal } from '../components/VerifyPickupModal';
 import { Ionicons } from '@expo/vector-icons';
 import BoxIcon from '../assets/svgs/BoxIcon';
+import ClockICon from '../assets/svgs/ClockICon';
+import LocationPin from '../assets/svgs/LocationPin';
 
 export type { ListingRequestItem };
 
@@ -36,6 +39,11 @@ export default function ListingRequestsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'ListingRequestsScreen'>>();
   const { listingTitle = 'Listing', listingId } = route.params ?? {};
+  const listings = useProviderListingsStore((s) => s.listings);
+  const listing = useMemo(
+    () => (listingId ? listings.find((l) => l.id === listingId) : null),
+    [listingId, listings]
+  );
 
   const [activeTab, setActiveTab] = useState<RequestTab>('Request');
   const [pendingRequests, setPendingRequests] = useState<ListingRequestItem[]>(MOCK_REQUESTS);
@@ -89,6 +97,55 @@ export default function ListingRequestsScreen() {
           contentPaddingHorizontal={16}
         />
       </View>
+
+      {listing != null && (
+        <View style={[styles.listingDetailsCard, { backgroundColor: colors.inputFieldBg, borderColor: colors.borderColor }]}>
+          <Text style={[styles.listingDetailsTitle, { color: colors.text, fontFamily: fontFamilies.interBold, fontSize: fonts.subhead }]}>
+            {listing.title || 'Food name'}
+          </Text>
+          <View style={styles.listingDetailsRow}>
+            <Ionicons name="cube-outline" size={14} color={colors.textSecondary} />
+            <Text style={[styles.listingDetailsText, { color: colors.textSecondary, fontFamily: fontFamilies.inter, fontSize: fonts.caption }]}>
+              {listing.quantity} {listing.quantityUnit}
+              {listing.foodType ? ` · ${listing.foodType}` : ''}
+            </Text>
+          </View>
+          <View style={styles.listingDetailsRow}>
+            <LocationPin width={14} height={14} color={colors.textSecondary} />
+            <Text style={[styles.listingDetailsText, { color: colors.textSecondary, fontFamily: fontFamilies.inter, fontSize: fonts.caption }]} numberOfLines={2}>
+              {listing.pickupAddress}
+            </Text>
+          </View>
+          <View style={styles.listingDetailsRow}>
+            <ClockICon width={14} height={14} color={colors.textSecondary} />
+            <Text style={[styles.listingDetailsText, { color: colors.textSecondary, fontFamily: fontFamilies.inter, fontSize: fonts.caption }]}>
+              {listing.startTime} – {listing.endTime}
+            </Text>
+          </View>
+          {listing.note != null && listing.note !== '' && (
+            <View style={styles.listingDetailsRow}>
+              <Ionicons name="document-text-outline" size={14} color={colors.textSecondary} />
+              <Text style={[styles.listingDetailsText, { color: colors.textSecondary, fontFamily: fontFamilies.inter, fontSize: fonts.caption }]} numberOfLines={3}>
+                {listing.note}
+              </Text>
+            </View>
+          )}
+          {(listing.dietaryTags?.length > 0 || listing.allergens?.length > 0) && (
+            <View style={styles.listingDetailsTags}>
+              {listing.dietaryTags?.map((tag) => (
+                <View key={tag} style={[styles.listingTag, { backgroundColor: isDark ? colors.surfaceBorder : palette.roleCard }]}>
+                  <Text style={[styles.listingTagText, { color: colors.text, fontFamily: fontFamilies.interMedium, fontSize: fonts.caption }]}>{tag}</Text>
+                </View>
+              ))}
+              {listing.allergens?.filter((a) => a !== 'None').map((tag) => (
+                <View key={tag} style={[styles.listingTag, { backgroundColor: palette.glutenColor }]}>
+                  <Text style={[styles.listingTagText, { color: isDark ? palette.roleBulbColor3 : palette.roleBulbColor1, fontFamily: fontFamilies.interMedium, fontSize: fonts.caption }]}>{tag}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
 
       <View style={styles.tabsRow}>
         <ActiveCompletedTabs
@@ -254,6 +311,37 @@ const styles = StyleSheet.create({
   headerWrap: {
     width: '100%',
   },
+  listingDetailsCard: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  listingDetailsTitle: {
+    marginBottom: 8,
+  },
+  listingDetailsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  listingDetailsText: {
+    flex: 1,
+  },
+  listingDetailsTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  listingTag: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 100,
+  },
+  listingTagText: {},
   tabsRow: {
     marginHorizontal: 16,
     marginBottom: 16,

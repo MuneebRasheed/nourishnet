@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useThemeStore } from '../../store/themeStore';
-import { getColors, palette } from '../../utils/colors';
+import { getColors } from '../../utils/colors';
 import { useAppFontSizes } from '../../theme/fonts';
 import { fontFamilies } from '../../theme/typography';
 import { RootStackParamList } from '../navigations/RootNavigation';
@@ -19,8 +19,7 @@ import SettingsHeader from '../components/SettingsHeader';
 import CategoryChips from '../components/CategoryChips';
 import ContinueButton from '../components/ContinueButton';
 import { AuthInput } from '../components/AuthInput';
-import ChevronLeft from '../assets/svgs/ChevronLeft';
-import ArrowDown from '../assets/svgs/ArrowDown';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import ArrowBACK from '../assets/svgs/ArrowBACK';
 
 const FOOD_TYPES = ['Prepared Meals', 'Baked Goods', 'Produce', 'Dairy', 'Pantry', 'Other'];
@@ -143,7 +142,11 @@ export default function PostFoodScreen() {
             >
               {foodType ?? 'Select food type'}
             </Text>
-            <ArrowDown width={20} height={20} color={arrowColor} />
+            <MaterialIcons
+              name={showFoodTypeOptions ? 'keyboard-arrow-up' : 'keyboard-arrow-down'}
+              size={24}
+              color={arrowColor}
+            />
           </TouchableOpacity>
           {showFoodTypeOptions && (
             <View style={[styles.dropdown, { backgroundColor: colors.inputFieldBg, borderColor: colors.borderColor }]}>
@@ -199,7 +202,11 @@ export default function PostFoodScreen() {
               <Text style={[styles.unitText, { color: colors.text, fontFamily: fontFamilies.inter, fontSize: fonts.subhead }]}>
                 {quantityUnit}
               </Text>
-              <ArrowDown width={20} height={20} color={arrowColor} />
+              <MaterialIcons
+                name={showQuantityUnitOptions ? 'keyboard-arrow-up' : 'keyboard-arrow-down'}
+                size={24}
+                color={arrowColor}
+              />
             </TouchableOpacity>
           </View>
           {showQuantityUnitOptions && (
@@ -363,7 +370,7 @@ const styles = StyleSheet.create({
     marginTop: 32,
     width: '100%',
   },
-  fieldGroup2:{
+  fieldGroup2: {
     marginTop: 12,
-  }
+  },
 });

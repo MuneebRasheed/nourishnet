@@ -85,9 +85,13 @@ const LoginScreen = () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         const profile = await fetchProfile(user.id)
-        setAuth(profile?.role ?? null, profile ?? null)
+        // Use profile role from DB; if missing, use role from the path they came from (Provider vs Recipient)
+        const resolvedRole = profile?.role ?? role ?? null
+        const profileWithRole = profile ? { ...profile, role: resolvedRole } : null
+        setAuth(resolvedRole, profileWithRole)
       }
-      navigation.replace('MainTabs')
+      // Navigate on next tick so MainTabNavigator reads updated auth store and shows correct tabs (provider 4 tabs / recipient 5 tabs).
+      setTimeout(() => navigation.replace('MainTabs'), 0)
     } finally {
       setLoading(false)
     }

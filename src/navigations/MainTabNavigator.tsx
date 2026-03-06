@@ -53,11 +53,16 @@ function MainTabNavigator() {
     </View>
   );
 
+  // Provider flow: Home (ProviderHomeScreen), Listings, Analytics, Settings (4 tabs).
+  // Recipient flow: Home (HomeScreen), Favorites, Search, Analytics, Settings (5 tabs).
   const isProvider = userRole === 'provider';
 
   return (
     <Tab.Navigator
       id="MainTabNavigator"
+      initialRouteName="Home"
+      // Key by role so tabs remount and show the correct set (provider vs recipient) after login.
+      key={isProvider ? 'provider' : 'recipient'}
       screenOptions={{
         headerShown: false,
         tabBarStyle: [

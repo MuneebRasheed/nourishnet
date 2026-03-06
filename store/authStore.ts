@@ -28,18 +28,32 @@ interface AuthState {
   clearAuth: () => void;
 }
 
+function normalizeAuthRole(role: unknown): AuthRole | null {
+  if (typeof role !== 'string') return null;
+  const v = role.trim().toLowerCase();
+  if (v === 'provider') return 'provider';
+  if (v === 'recipient') return 'recipient';
+  if (v === 'food_provider' || v === 'food provider') return 'provider';
+  if (v === 'food_recipient' || v === 'food recipient') return 'recipient';
+  return null;
+}
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
       userRole: null,
       profile: null,
-      setUserRole: (userRole) => set({ userRole }),
+      setUserRole: (userRole) => set({ userRole: normalizeAuthRole(userRole) }),
       setProfile: (profile) =>
         set({
           profile,
-          userRole: profile?.role ?? null,
+          userRole: normalizeAuthRole(profile?.role),
         }),
-      setAuth: (userRole, profile) => set({ userRole, profile }),
+      setAuth: (userRole, profile) =>
+        set({
+          userRole: normalizeAuthRole(userRole ?? profile?.role),
+          profile,
+        }),
       clearAuth: () => set({ userRole: null, profile: null }),
     }),
     {
