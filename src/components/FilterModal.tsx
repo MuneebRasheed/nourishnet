@@ -4,6 +4,7 @@ import {
   Text,
   View,
   Modal,
+  Platform,
   Pressable,
   TouchableOpacity,
   TextInput,
@@ -11,6 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useThemeStore } from '../../store/themeStore';
 import { getColors, palette } from '../../utils/colors';
 import { useAppFontSizes } from '../../theme/fonts';
@@ -18,8 +20,38 @@ import { fontFamilies } from '../../theme/typography';
 import ContinueButton from './ContinueButton';
 import ForwardArrow from '../assets/svgs/ForwardArrow';
 import XCircle from '../assets/svgs/XCircle';
+import ArrowDown from '../assets/svgs/ArrowDown';
+import ClockICon from '../assets/svgs/ClockICon';
+import LocationPin from '../assets/svgs/LocationPin';
 
 const ALLERGEN_OPTIONS = ['Gluten', 'Eggs', 'Nuts', ];
+
+const FOOD_TYPE_OPTIONS = ['Prepared Meals', 'Baked Goods', 'Produce', 'Dairy', 'Pantry'];
+
+const CITY_OPTIONS = ['New York', 'Los Angeles', 'Chicago', 'Houston', 'Phoenix'];
+
+function formatTimeForFilter(date: Date): string {
+  return date.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  }).replace(/\s/g, '');
+}
+
+function parseTimeForFilter(s: string): Date | null {
+  if (!s || typeof s !== 'string') return null;
+  const trimmed = s.trim().replace(/\s/g, '');
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i) ?? trimmed.match(/^(\d{1,2}):(\d{2})(AM|PM)$/i);
+  if (!match) return null;
+  let hour = parseInt(match[1], 10);
+  const minute = parseInt(match[2], 10);
+  const isPM = match[3].toUpperCase() === 'PM';
+  if (isPM && hour !== 12) hour += 12;
+  if (!isPM && hour === 12) hour = 0;
+  const d = new Date();
+  d.setHours(hour, minute, 0, 0);
+  return d;
+}
 
 export type FilterState = {
   foodType: string;
@@ -64,6 +96,60 @@ export default function FilterModal({
     defaultFilterState.allergens
   );
   const [city, setCity] = useState(defaultFilterState.city);
+  const [showTimePickerModal, setShowTimePickerModal] = useState(false);
+  const [timePickerMode, setTimePickerMode] = useState<'start' | 'end' | null>(null);
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const [showEndPicker, setShowEndPicker] = useState(false);
+  const [showFoodTypePicker, setShowFoodTypePicker] = useState(false);
+  const [showCityPicker, setShowCityPicker] = useState(false);
+
+  const getDefaultStart = () => {
+    const d = new Date();
+    d.setHours(16, 0, 0, 0);
+    return d;
+  };
+  const getDefaultEnd = () => {
+    const d = new Date();
+    d.setHours(17, 30, 0, 0);
+    return d;
+  };
+
+  const openStartTimePicker = () => {
+    setTimePickerMode('start');
+    setShowEndPicker(false);
+    setShowStartPicker(true);
+    if (Platform.OS === 'ios') setShowTimePickerModal(true);
+  };
+
+  const openEndTimePicker = () => {
+    setTimePickerMode('end');
+    setShowStartPicker(false);
+    setShowEndPicker(true);
+    if (Platform.OS === 'ios') setShowTimePickerModal(true);
+  };
+
+  const closeTimePickerModal = () => {
+    setShowTimePickerModal(false);
+    setTimePickerMode(null);
+    setShowStartPicker(false);
+    setShowEndPicker(false);
+  };
+
+  const handleStartTimeChange = (_: unknown, date?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowStartPicker(false);
+      setShowTimePickerModal(false);
+    }
+    if (date) setPickupTimeStart(formatTimeForFilter(date));
+  };
+
+  const handleEndTimeChange = (_: unknown, date?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowEndPicker(false);
+      setShowTimePickerModal(false);
+    }
+    if (date) setPickupTimeEnd(formatTimeForFilter(date));
+  };
 
   const handleReset = () => {
     setFoodType(defaultFilterState.foodType);
@@ -182,6 +268,7 @@ export default function FilterModal({
               <TouchableOpacity
                 style={[styles.inputRow, { backgroundColor: colors.inputFieldBg }]}
                 activeOpacity={0.8}
+                onPress={() => setShowFoodTypePicker(true)}
               >
                 <Text
                   style={[
@@ -203,6 +290,58 @@ export default function FilterModal({
                   />
                 </View>
               </TouchableOpacity>
+
+              <Modal
+                visible={showFoodTypePicker}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowFoodTypePicker(false)}
+              >
+                <TouchableOpacity
+                  style={styles.timePickerOverlay}
+                  activeOpacity={1}
+                  onPress={() => setShowFoodTypePicker(false)}
+                >
+                  <View
+                    style={[styles.timePickerModal, { backgroundColor: colors.background }]}
+                    onStartShouldSetResponder={() => true}
+                  >
+                    <Text
+                      style={[
+                        styles.timePickerModalTitle,
+                        { color: colors.text, fontFamily: fontFamilies.interMedium, fontSize: fonts.subhead },
+                      ]}
+                    >
+                      Food Type
+                    </Text>
+                    <ScrollView
+                      style={styles.foodTypeOptionsScroll}
+                      showsVerticalScrollIndicator={false}
+                    >
+                      {FOOD_TYPE_OPTIONS.map((type) => (
+                        <TouchableOpacity
+                          key={type}
+                          style={[styles.foodTypeOptionRow, { borderBottomColor: colors.borderColor }]}
+                          activeOpacity={0.8}
+                          onPress={() => {
+                            setFoodType(type);
+                            setShowFoodTypePicker(false);
+                          }}
+                        >
+                          <Text
+                            style={[
+                              styles.foodTypeOptionText,
+                              { color: colors.text, fontFamily: fontFamilies.inter, fontSize: fonts.body },
+                            ]}
+                          >
+                            {type}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                </TouchableOpacity>
+              </Modal>
             </View>
 
             <View style={styles.section}>
@@ -218,39 +357,131 @@ export default function FilterModal({
               >
                 Pickup Time
               </Text>
-              <View style={styles.timeRow}>
-                <TextInput
-                  style={[
-                    styles.timeInput,
-                    {
-                      backgroundColor: colors.inputFieldBg,
-                      color: colors.text,
-                      fontFamily: fontFamilies.inter,
-                      fontSize: fonts.subhead,
-                    },
-                  ]}
-                  value={pickupTimeStart}
-                  onChangeText={setPickupTimeStart}
-                  placeholder="03:30PM"
-                  placeholderTextColor={colors.textSecondary}
-                />
-                <TextInput
-                  style={[
-                    styles.timeInput,
-                    {
-                      backgroundColor: colors.inputFieldBg,
-                      color: colors.text,
-                      fontFamily: fontFamilies.inter,
-                      fontSize: fonts.subhead,
-                    },
-                  ]}
-                  value={pickupTimeEnd}
-                  onChangeText={setPickupTimeEnd}
-                  placeholder="03:30PM"
-                  placeholderTextColor={colors.textSecondary}
-                />
+              <View style={styles.timeFieldsRow}>
+                <View style={styles.timeFieldHalf}>
+                 
+                  <TouchableOpacity
+                    style={[styles.timeFieldCard, { backgroundColor: colors.inputFieldBg }]}
+                    activeOpacity={0.8}
+                    onPress={openStartTimePicker}
+                  >
+                    <LocationPin width={20} height={20} color={colors.text} />
+                    <View style={styles.timeFieldValueWrap}>
+                      <Text
+                        style={[
+                          styles.timeFieldValue,
+                          {
+                            color: colors.text,
+                            fontFamily: fontFamilies.inter,
+                            fontSize: fonts.subhead,
+                          },
+                        ]}
+                      >
+                        {pickupTimeStart || 'Select'}
+                      </Text>
+                    </View>
+                    <ArrowDown width={20} height={20} color={colors.text} />
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.timeFieldHalf}>
+                 
+                  <TouchableOpacity
+                    style={[styles.timeFieldCard, { backgroundColor: colors.inputFieldBg }]}
+                    activeOpacity={0.8}
+                    onPress={openEndTimePicker}
+                  >
+                    <ClockICon width={20} height={20} color={colors.text} />
+                    <View style={styles.timeFieldValueWrap}>
+                      <Text
+                        style={[
+                          styles.timeFieldValue,
+                          {
+                            color: colors.text,
+                            fontFamily: fontFamilies.inter,
+                            fontSize: fonts.subhead,
+                          },
+                        ]}
+                      >
+                        {pickupTimeEnd || 'Select'}
+                      </Text>
+                    </View>
+                    <ArrowDown width={20} height={20} color={colors.text} />
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
+
+            <Modal
+              visible={showTimePickerModal}
+              transparent
+              animationType="slide"
+              onRequestClose={closeTimePickerModal}
+            >
+              <TouchableOpacity
+                style={styles.timePickerOverlay}
+                activeOpacity={1}
+                onPress={closeTimePickerModal}
+              >
+                <View
+                  style={[styles.timePickerModal, { backgroundColor: colors.background }]}
+                  onStartShouldSetResponder={() => true}
+                >
+                  <Text
+                    style={[
+                      styles.timePickerModalTitle,
+                      {
+                        color: colors.text,
+                        fontFamily: fontFamilies.interBold,
+                        fontSize: fonts.body,
+                      },
+                    ]}
+                  >
+                    {timePickerMode === 'start' ? 'Start Time' : 'End Time'}
+                  </Text>
+                  {timePickerMode === 'start' && Platform.OS === 'ios' && (
+                    <DateTimePicker
+                      value={parseTimeForFilter(pickupTimeStart) ?? getDefaultStart()}
+                      mode="time"
+                      display="spinner"
+                      themeVariant={isDark ? 'dark' : 'light'}
+                      onChange={handleStartTimeChange}
+                    />
+                  )}
+                  {timePickerMode === 'end' && Platform.OS === 'ios' && (
+                    <DateTimePicker
+                      value={parseTimeForFilter(pickupTimeEnd) ?? getDefaultEnd()}
+                      mode="time"
+                      display="spinner"
+                      themeVariant={isDark ? 'dark' : 'light'}
+                      onChange={handleEndTimeChange}
+                    />
+                  )}
+                  <ContinueButton
+                    label="Done"
+                    onPress={closeTimePickerModal}
+                    isDark={isDark}
+                    style={styles.timePickerDoneBtn}
+                  />
+                </View>
+              </TouchableOpacity>
+            </Modal>
+
+            {showStartPicker && Platform.OS === 'android' && (
+              <DateTimePicker
+                value={parseTimeForFilter(pickupTimeStart) ?? getDefaultStart()}
+                mode="time"
+                display="default"
+                onChange={handleStartTimeChange}
+              />
+            )}
+            {showEndPicker && Platform.OS === 'android' && (
+              <DateTimePicker
+                value={parseTimeForFilter(pickupTimeEnd) ?? getDefaultEnd()}
+                mode="time"
+                display="default"
+                onChange={handleEndTimeChange}
+              />
+            )}
 
             <View style={styles.section}>
               <Text
@@ -274,7 +505,7 @@ export default function FilterModal({
                 <View style={styles.allergenInnerRow}>
                   {allergens.map((item) => (
                     <TouchableOpacity
-                      key={item}
+                      key={`selected-${item}`}
                       onPress={() => removeAllergen(item)}
                       activeOpacity={0.8}
                       style={[styles.allergenChip, { backgroundColor: colors.primary }]}
@@ -302,7 +533,7 @@ export default function FilterModal({
                   ))}
                   {ALLERGEN_OPTIONS.filter((opt) => !allergens.includes(opt)).map((item) => (
                     <TouchableOpacity
-                      key={item}
+                      key={`option-${item}`}
                       onPress={() => addAllergen(item)}
                       activeOpacity={0.8}
                       style={styles.allergenOptionTextWrap}
@@ -341,6 +572,7 @@ export default function FilterModal({
               <TouchableOpacity
                 style={[styles.inputRow, { backgroundColor: colors.inputFieldBg }]}
                 activeOpacity={0.8}
+                onPress={() => setShowCityPicker(true)}
               >
                 <Text
                   style={[
@@ -362,6 +594,58 @@ export default function FilterModal({
                   />
                 </View>
               </TouchableOpacity>
+
+              <Modal
+                visible={showCityPicker}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowCityPicker(false)}
+              >
+                <TouchableOpacity
+                  style={styles.timePickerOverlay}
+                  activeOpacity={1}
+                  onPress={() => setShowCityPicker(false)}
+                >
+                  <View
+                    style={[styles.timePickerModal, { backgroundColor: colors.background }]}
+                    onStartShouldSetResponder={() => true}
+                  >
+                    <Text
+                      style={[
+                        styles.timePickerModalTitle,
+                        { color: colors.text, fontFamily: fontFamilies.interMedium, fontSize: fonts.subhead },
+                      ]}
+                    >
+                      City
+                    </Text>
+                    <ScrollView
+                      style={styles.foodTypeOptionsScroll}
+                      showsVerticalScrollIndicator={true}
+                    >
+                      {CITY_OPTIONS.map((name) => (
+                        <TouchableOpacity
+                          key={name}
+                          style={[styles.foodTypeOptionRow, { borderBottomColor: colors.borderColor }]}
+                          activeOpacity={0.8}
+                          onPress={() => {
+                            setCity(name);
+                            setShowCityPicker(false);
+                          }}
+                        >
+                          <Text
+                            style={[
+                              styles.foodTypeOptionText,
+                              { color: colors.text, fontFamily: fontFamilies.inter, fontSize: fonts.body },
+                            ]}
+                          >
+                            {name}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                </TouchableOpacity>
+              </Modal>
             </View>
 
             <ContinueButton
@@ -440,15 +724,56 @@ const styles = StyleSheet.create({
   },
   inputPlaceholder: {},
   chevron: {},
-  timeRow: {
+  timeFieldsRow: {
     flexDirection: 'row',
     gap: 12,
   },
-  timeInput: {
+  timeFieldHalf: {
     flex: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    
+  },
+  timeFieldLabel: {
+    marginBottom: 8,
+  },
+  timeFieldCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 12,
     borderRadius: 12,
+    gap: 10,
+  },
+  timeFieldValueWrap: {
+    flex: 1,
+  },
+  timeFieldValue: {},
+  timePickerOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  timePickerModal: {
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 34,
+  },
+  timePickerModalTitle: {
+    marginBottom: 16,
+  },
+  foodTypeOptionsScroll: {
+    maxHeight: 240,
+  },
+  foodTypeOptionRow: {
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+  },
+  foodTypeOptionText: {},
+  timePickerDoneBtn: {
+    marginTop: 16,
+    width: '100%',
   },
   allergenInputContainer: {
     borderRadius: 12,

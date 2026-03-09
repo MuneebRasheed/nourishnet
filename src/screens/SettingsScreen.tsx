@@ -129,18 +129,21 @@ export default function SettingsScreen() {
           </Text>
           <View style={[styles.sectionCard, { backgroundColor: colors.inputFieldBg }, !isDark && { borderWidth: 1, borderColor: colors.borderColor }]}>
             <SettingsRow
+              backgroundColor={colors.inputFieldBg}
               iconComponent={<PartnerIcon width={20} height={20} stroke={colors.text} />}
               label="Edit Profile"
               onPress={handleEditProfile}
               isLast={false}
             />
             <SettingsRow
+              backgroundColor={colors.inputFieldBg}
               iconComponent={<BellIcon width={20} height={20} stroke={colors.text} />}
               label="Notifications"
               onPress={() => navigation.navigate('NotificationsScreen')}
               isLast={false}
             />
             <SettingsRow
+              backgroundColor={colors.inputFieldBg}
               iconComponent={<LockIcon width={20} height={20} color={colors.text} />}
               label="Change password"
               onPress={() => navigation.navigate('ChangePasswordScreen')}
@@ -160,6 +163,7 @@ export default function SettingsScreen() {
           </Text>
           <View style={[styles.sectionCard, { backgroundColor: colors.inputFieldBg }, !isDark && { borderWidth: 1, borderColor: colors.borderColor }]}>
             <SettingsRow
+            backgroundColor={colors.inputFieldBg}
               iconComponent={<Ticon width={20} height={20} color={colors.text} />}
               label="Large Font"
               showChevron={false}
@@ -178,6 +182,7 @@ export default function SettingsScreen() {
               }
             />
             <SettingsRow
+              backgroundColor={colors.inputFieldBg}
               iconComponent={<LightIcon width={20} height={20} color={colors.text} />}
               label="Theme"
               onPress={() => navigation.navigate('ThemeScreen')}
@@ -198,6 +203,7 @@ export default function SettingsScreen() {
             </Text>
             <View style={[styles.sectionCard, { backgroundColor: colors.inputFieldBg }, !isDark && { borderWidth: 1, borderColor: colors.borderColor }]}>
               <SettingsRow
+                backgroundColor={colors.inputFieldBg}
                 iconComponent={<KingIcon width={20} height={20} color={colors.text} />}
                 label="Subscription Management"
                 onPress={handleSubscriptionManagement}
@@ -218,18 +224,21 @@ export default function SettingsScreen() {
           </Text>
           <View style={[styles.sectionCard, { backgroundColor: colors.inputFieldBg }, !isDark && { borderWidth: 1, borderColor: colors.borderColor }]}>
             <SettingsRow
+              backgroundColor={colors.inputFieldBg}
               icon="document-text-outline"
               label="Terms & conditions"
               onPress={() => navigation.navigate('TermsAndConditionsScreen')}
               isLast={false}
             />
             <SettingsRow
+              backgroundColor={colors.inputFieldBg}
               iconComponent={<PrivacyIcon width={20} height={20} stroke={colors.text} />}
               label="Privacy policy"
               onPress={() => navigation.navigate('PrivacyPolicyScreen')}
               isLast={false}
             />
             <SettingsRow
+              backgroundColor={colors.inputFieldBg}
               iconComponent={<DeleteIcon width={20} height={20} />}
               label="Deactivate account"
               onPress={() => setShowDeactivateModal(true)}

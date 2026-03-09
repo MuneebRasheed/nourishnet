@@ -1,9 +1,9 @@
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Pressable } from 'react-native';
+import { StyleSheet, Text, View, Pressable, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeStore } from '../../store/themeStore';
 import ForwardArrow from '../assets/svgs/ForwardArrow';
-import { getColors, palette } from '../../utils/colors';
+import { getColors } from '../../utils/colors';
 import { useAppFontSizes } from '../../theme/fonts';
 import { fontFamilies } from '../../theme/typography';
 
@@ -17,7 +17,15 @@ export type SettingsRowProps = {
   rightElement?: React.ReactNode;
   labelColor?: string;
   iconBg?: string;
+  backgroundColor?: string;
 };
+
+const ICON_BG_DARK = '#FFFFFF1A';
+const ICON_BG_LIGHT = '#0C0C0D08';
+const BORDER_DARK = 'rgba(255,255,255,0.12)';
+const BORDER_LIGHT = 'rgba(0,0,0,0.1)';
+const RIPPLE_DARK = 'rgba(255,255,255,0.08)';
+const RIPPLE_LIGHT = 'rgba(0,0,0,0.06)';
 
 export default function SettingsRow({
   icon,
@@ -29,41 +37,42 @@ export default function SettingsRow({
   rightElement,
   labelColor,
   iconBg,
+  backgroundColor,
 }: SettingsRowProps) {
-  const theme = useThemeStore((s) => s.theme);
-  const isDark = theme === 'dark';
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
   const colors = getColors(isDark);
   const fonts = useAppFontSizes();
-  const textColor = labelColor ?? colors.text;
-  const wrapBg = iconBg ?? (isDark ? colors.inputFieldBg : palette.editProfileIconBg);
 
-  const content = (
-    <>
-      <View style={[styles.iconWrap, { backgroundColor: wrapBg }]}>
-        {iconComponent ?? (icon != null && <Ionicons name={icon} size={20} color={colors.text} />)}
-      </View>
-      <Text
-        style={[
-          styles.label,
-          { color: textColor, fontFamily: fontFamilies.interSemiBold, fontSize: fonts.body },
-        ]}
-      >
-        {label}
-      </Text>
-      {rightElement ?? (showChevron && (
-        <ForwardArrow width={20} height={20} stroke={colors.text} />
-      ))}
-    </>
-  );
+  const bg = backgroundColor ?? colors.inputFieldBg;
+  const iconBackground = iconBg ?? (isDark ? ICON_BG_DARK : ICON_BG_LIGHT);
+  const labelColorResolved = labelColor ?? colors.text;
+  const borderColor = isDark ? BORDER_DARK : BORDER_LIGHT;
 
   const rowStyle = [
     styles.row,
-    !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)' },
+    { backgroundColor: bg },
+    !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: borderColor },
   ];
+
+  const content = (
+    <>
+      <View style={[styles.iconWrap, { backgroundColor: iconBackground }]}>
+        {iconComponent ?? (icon != null && <Ionicons name={icon} size={20} color={colors.text} />)}
+      </View>
+      <Text style={[styles.label, { color: labelColorResolved, fontFamily: fontFamilies.interSemiBold, fontSize: fonts.body }]}>
+        {label}
+      </Text>
+      {rightElement ?? (showChevron && <ForwardArrow width={20} height={20} stroke={colors.text} />)}
+    </>
+  );
 
   if (onPress) {
     return (
-      <Pressable    onPress={onPress} style={rowStyle}>
+      <Pressable
+        onPress={onPress}
+        style={rowStyle}
+        android_ripple={Platform.OS === 'android' ? { color: isDark ? RIPPLE_DARK : RIPPLE_LIGHT } : undefined}
+      >
         {content}
       </Pressable>
     );
@@ -78,8 +87,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     paddingHorizontal: 20,
-    
-  
   },
   iconWrap: {
     width: 40,
@@ -88,7 +95,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 14,
-
   },
   label: {
     flex: 1,

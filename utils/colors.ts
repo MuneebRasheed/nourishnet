@@ -39,6 +39,7 @@ export const palette = {
   restorePurchasesColor: '#1083FD',
   highPriorityBg: '#FEE9E7',
   greenTickColor: '#009951',
+  notificationIconBg: "rgb(45,55,55)"
   
 } as const
 

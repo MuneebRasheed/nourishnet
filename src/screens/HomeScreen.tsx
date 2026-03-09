@@ -232,7 +232,19 @@ export default function HomeScreen() {
                   >
                     No active food listings found
                   </Text>
-                
+                  <Text
+                    style={[
+                      styles.emptyStateTitle,
+                      {
+                        color: colors.textSecondary,
+                        fontFamily: fontFamilies.inter,
+                        fontSize: fonts.caption,
+                        marginTop: 4,
+                      },
+                    ]}
+                  >
+                    Create a new listing to start sharing food.
+                  </Text>
                 </View>
               </View>
             ) : (

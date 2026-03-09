@@ -41,11 +41,11 @@ export default function PickupDetailsCard({
         <Text style={[styles.primary, { color: colors.text, fontFamily: fontFamilies.interSemiBold, fontSize: fonts.body }]}>
           {primary}
         </Text>
-        {secondary != null && secondary !== '' && (
-          <Text style={[styles.secondary, { color: colors.textSecondary, fontFamily: fontFamilies.inter, fontSize: fonts.subhead }]}>
+        {/* {secondary != null && secondary !== '' && (
+          <Text style={[styles.secondary, { color: colors.textSecondary, fontFamily: fontFamilies.inter, fontSize: fonts.body }]}>
             {secondary}
           </Text>
-        )}
+        )} */}
       </View>
     </View>
   );
