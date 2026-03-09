@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  Alert,
   StyleSheet,
   Text,
   View,
@@ -28,6 +29,7 @@ import ArrowBACK from '../assets/svgs/ArrowBACK';
 import ClockICon from '../assets/svgs/ClockICon';
 import LocationPin from '../assets/svgs/LocationPin';
 import { useProviderListingsStore } from '../../store/providerListingsStore';
+import { createListingApi } from '../lib/api/listings';
 
 function formatTimeForDisplay(date: Date): string {
   return date.toLocaleTimeString('en-US', {
@@ -52,7 +54,8 @@ export default function PostPublishScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'PostPublishScreen'>>();
-  const addListing = useProviderListingsStore((s) => s.addListing);
+  const addListingFromApi = useProviderListingsStore((s) => s.addListingFromApi);
+  const [publishing, setPublishing] = useState(false);
 
   const [pickupAddress, setPickupAddress] = useState('');
   const getDefaultStart = () => {
@@ -122,28 +125,37 @@ export default function PostPublishScreen() {
   };
 
   const allConfirmed = confirmations.every(Boolean);
-  const handlePublish = () => {
+  const handlePublish = async () => {
     if (!allConfirmed) return;
 
     const draft = route.params?.draft;
-    if (!draft) {
-      return;
+    if (!draft) return;
+
+    setPublishing(true);
+    try {
+      const { listing, error } = await createListingApi({
+        title: draft.foodTitle || 'Food name',
+        foodType: draft.foodType,
+        quantity: draft.quantity,
+        quantityUnit: draft.quantityUnit,
+        dietaryTags: draft.dietarySelected,
+        allergens: draft.allergensSelected,
+        pickupAddress,
+        startTime: pickupStart ? formatTimeForDisplay(pickupStart) : '4:00 PM',
+        endTime: pickupEnd ? formatTimeForDisplay(pickupEnd) : '5:30 PM',
+        note,
+      });
+      if (error || !listing) {
+        Alert.alert('Error', error ?? 'Failed to publish. Please try again.');
+        return;
+      }
+      addListingFromApi(listing);
+      navigation.navigate('MainTabs', { screen: 'Home' });
+    } catch {
+      Alert.alert('Error', 'Something went wrong. Please try again.');
+    } finally {
+      setPublishing(false);
     }
-
-    addListing({
-      title: draft.foodTitle || 'Food name',
-      foodType: draft.foodType,
-      quantity: draft.quantity,
-      quantityUnit: draft.quantityUnit,
-      dietaryTags: draft.dietarySelected,
-      allergens: draft.allergensSelected,
-      pickupAddress,
-      startTime: pickupStart ? formatTimeForDisplay(pickupStart) : '4:00 PM',
-      endTime: pickupEnd ? formatTimeForDisplay(pickupEnd) : '5:30 PM',
-      note,
-    });
-
-    navigation.navigate('MainTabs', { screen: 'Home' });
   };
 
   return (
@@ -358,12 +370,12 @@ export default function PostPublishScreen() {
         </View>
 
             <ContinueButton
-              label="Publish"
+              label={publishing ? 'Publishing…' : 'Publish'}
               onPress={handlePublish}
               isDark={isDark}
               style={{
                 ...styles.publishButton,
-                ...(!allConfirmed ? styles.publishButtonDisabled : {}),
+                ...(!allConfirmed || publishing ? styles.publishButtonDisabled : {}),
               }}
             />
       </ScrollView>

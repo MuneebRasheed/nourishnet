@@ -28,6 +28,8 @@ export type ProviderListingDraft = Omit<
 interface ProviderListingsState {
   listings: ProviderListing[];
   addListing: (draft: ProviderListingDraft) => void;
+  addListingFromApi: (listing: ProviderListing) => void;
+  setListings: (listings: ProviderListing[]) => void;
   removeListing: (id: string) => void;
   completeListing: (id: string) => void;
   clearAll: () => void;
@@ -49,6 +51,11 @@ export const useProviderListingsStore = create<ProviderListingsState>()(
             ...state.listings,
           ],
         })),
+      addListingFromApi: (listing) =>
+        set((state) => ({
+          listings: [listing, ...state.listings.filter((l) => l.id !== listing.id)],
+        })),
+      setListings: (listings) => set({ listings }),
       removeListing: (id) =>
         set((state) => ({
           listings: state.listings.filter((listing) => listing.id !== id),

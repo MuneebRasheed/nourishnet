@@ -20,6 +20,7 @@ import ContinueButton from '../components/ContinueButton';
 import { ProviderListingCard } from '../components/ProviderListingCard';
 import { ActiveCompletedTabs, type ActiveCompletedTab } from '../components/ActiveCompletedTabs';
 import { useProviderListingsStore, type ProviderListing } from '../../store/providerListingsStore';
+import { deleteListingApi } from '../lib/api/listings';
 import { Ionicons } from '@expo/vector-icons';
 import BoxIcon from '../assets/svgs/BoxIcon';
 import SettingsHeader from '../components/SettingsHeader';
@@ -73,7 +74,18 @@ const navigation = useNavigation<CompositeNavigationProp<ListingsNav, RootNav>>(
       `Remove "${listing.title || 'this listing'}"? This cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => removeListing(listing.id) },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const { error } = await deleteListingApi(listing.id);
+            if (error) {
+              Alert.alert('Error', error);
+              return;
+            }
+            removeListing(listing.id);
+          },
+        },
       ]
     );
   };

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   Alert,
   StyleSheet,
@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useThemeStore } from '../../store/themeStore';
 import { getColors, palette } from '../../utils/colors';
@@ -22,6 +22,7 @@ import { ProviderImpactStatCard, ProviderImpactStatsRow } from '../components/Pr
 import { ProviderQuickActionButton, ProviderQuickActionsRow } from '../components/ProviderQuickActionButton';
 import { ProviderListingCard } from '../components/ProviderListingCard';
 import { useProviderListingsStore, type ProviderListing } from '../../store/providerListingsStore';
+import { fetchListingsApi, deleteListingApi } from '../lib/api/listings';
 import { useAuthStore } from '../../store/authStore';
 import { getDisplayName } from '../lib/profile';
 import { Ionicons } from '@expo/vector-icons';
@@ -42,9 +43,26 @@ export default function ProviderHomeScreen() {
   const insets = useSafeAreaInsets();
   const profile = useAuthStore((s) => s.profile);
   const allListings = useProviderListingsStore((s) => s.listings);
+  const setListings = useProviderListingsStore((s) => s.setListings);
   const removeListing = useProviderListingsStore((s) => s.removeListing);
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      (async () => {
+        const { listings: fetched, error } = await fetchListingsApi();
+        if (!cancelled && !error) setListings(fetched);
+      })();
+      return () => { cancelled = true; };
+    }, [setListings])
+  );
+
   const listings = useMemo(
     () => allListings.filter((l) => l.status === 'active'),
+    [allListings]
+  );
+  const completedCount = useMemo(
+    () => allListings.filter((l) => l.status === 'completed').length,
     [allListings]
   );
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -74,7 +92,18 @@ export default function ProviderHomeScreen() {
       `Remove "${listing.title || 'this listing'}"? This cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => removeListing(listing.id) },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const { error } = await deleteListingApi(listing.id);
+            if (error) {
+              Alert.alert('Error', error);
+              return;
+            }
+            removeListing(listing.id);
+          },
+        },
       ]
     );
   };
@@ -117,14 +146,14 @@ export default function ProviderHomeScreen() {
          
           <ProviderImpactStatsRow>
             <ProviderImpactStatCard
-              value="0"
+              value={String(listings.length)}
               title="Active Posts"
               label="Currently available"
               icon={ <BoxIcon width={26} height={26} color={isDark ? palette.roleBulbColor3 : palette.roleBulbColor1} /> }
               iconBgColor={isDark ? colors.inputFieldBg : palette.roleCardbg}
             />
             <ProviderImpactStatCard
-              value="0"
+              value={String(completedCount)}
               title="Completed"
               label="Successfully picked up"
               icon={<CheckMarkHeart width={20} height={20} color={colors.primary} />}
