@@ -1,9 +1,10 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useThemeStore } from '../../store/themeStore';
+import { useRequestedListingsStore } from '../../store/requestedListingsStore';
 import { getColors, palette } from '../../utils/colors';
 import { useAppFontSizes } from '../../theme/fonts';
 import { fontFamilies } from '../../theme/typography';
@@ -15,6 +16,7 @@ import SearchBarWithFilter from '../components/SearchBarWithFilter';
 import FilterModal from '../components/FilterModal';
 import CategoryChips from '../components/CategoryChips';
 import FoodCard, { FoodCardData } from '../components/FoodCard';
+import BoxIcon from '../assets/svgs/BoxIcon';
 import type { FoodDetailItem } from './FoodDetailScreen';
 
 const DEFAULT_LISTING_IMAGE = require('../assets/images/FoodOnboard1.png');
@@ -103,6 +105,12 @@ export default function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [browseListings, setBrowseListings] = useState<ProviderListing[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchListings = async () => {
+    const { listings, error } = await fetchBrowseListingsApi();
+    setBrowseListings(error ? [] : listings);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -111,11 +119,17 @@ export default function HomeScreen() {
       const { listings, error } = await fetchBrowseListingsApi();
       if (!cancelled) {
         setBrowseListings(error ? [] : listings);
+        setLoading(false);
       }
-      if (!cancelled) setLoading(false);
     })();
     return () => { cancelled = true; };
   }, []);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchListings();
+    setRefreshing(false);
+  };
 
   const activeListings = useMemo(
     () => browseListings.filter((l) => l.status === 'active'),
@@ -125,10 +139,23 @@ export default function HomeScreen() {
     () => activeListings.map(providerListingToDetailItem),
     [activeListings]
   );
-  const displayList = listingItems.length > 0 ? listingItems : MOCK_FOOD_LIST;
+  const baseList = listingItems.length > 0 ? listingItems : MOCK_FOOD_LIST;
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('All');
+
+  const displayList = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return baseList;
+    return baseList.filter(
+      (item) =>
+        item.title.toLowerCase().includes(q) ||
+        (item.source && item.source.toLowerCase().includes(q)) ||
+        (item.dietaryTags?.some((t) => t.toLowerCase().includes(q)))
+    );
+  }, [baseList, search]);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
+  const isRequested = useRequestedListingsStore((s) => s.isRequested);
+  const addRequestedId = useRequestedListingsStore((s) => s.addRequestedId);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -139,6 +166,13 @@ export default function HomeScreen() {
           { paddingTop: insets.top , paddingBottom: insets.bottom + 100 },
         ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+          />
+        }
       >
         <View style={styles.content}>
           <HomeHeader />
@@ -169,13 +203,51 @@ export default function HomeScreen() {
             </View>
           </View>
           <View style={styles.cards}>
-            {displayList.map((item) => (
-              <FoodCard
-                key={item.id}
-                item={item as FoodCardData}
-                onClaim={() => navigation.navigate('FoodDetailScreen', { item })}
-              />
-            ))}
+            {displayList.length === 0 ? (
+              <View style={styles.emptyStateCenter}>
+                <View style={styles.emptyStateCard}>
+                  <View style={styles.emptyStateIconWrap}>
+                    <BoxIcon width={64} height={64} color={colors.textSecondary} />
+                  </View>
+                  <Text
+                    style={[
+                      styles.emptyStateTitle,
+                      {
+                        color: colors.text,
+                        fontFamily: fontFamilies.interSemiBold,
+                        fontSize: fonts.body,
+                      },
+                    ]}
+                  >
+                    No active food listings found
+                  </Text>
+                
+                </View>
+              </View>
+            ) : (
+              displayList.map((item) => {
+                const requested = isRequested(item.id);
+                return (
+                  <FoodCard
+                    key={item.id}
+                    item={item as FoodCardData}
+                    claimLabel={requested ? 'Request Submitted' : 'Request This Food'}
+                    claimButtonVariant={requested ? 'outline' : 'primary'}
+                    claimButtonBgColor={requested ? colors.inputFieldBg : undefined}
+                    claimButtonTextColor={requested ? colors.textSecondary : undefined}
+                    claimIconColor={requested ? colors.textSecondary : undefined}
+                    onClaim={
+                      requested
+                        ? undefined
+                        : () => {
+                            addRequestedId(item.id);
+                            navigation.navigate('FoodDetailScreen', { item });
+                          }
+                    }
+                  />
+                );
+              })
+            )}
           </View>
         </View>
       </ScrollView>
@@ -207,6 +279,7 @@ const styles = StyleSheet.create({
   },
   categoriesSection: {
     marginTop: 20,
+    marginHorizontal: -16,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -226,5 +299,25 @@ const styles = StyleSheet.create({
   },
   cards: {
     paddingBottom: 8,
+  },
+  emptyStateCenter: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingVertical: 48,
+  },
+  emptyStateCard: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyStateIconWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyStateTitle: {
+    marginTop: 16,
+  },
+  emptyStateSubtitle: {
+    marginTop: 8,
+    textAlign: 'center',
   },
 });

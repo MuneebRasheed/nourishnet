@@ -5,7 +5,7 @@ import { getColors, palette } from '../../utils/colors';
 import { useAppFontSizes } from '../../theme/fonts';
 import { fontFamilies } from '../../theme/typography';
 
-const DEFAULT_CATEGORIES = ['All', 'Prepared Meals', 'Baked Goods', 'Dairy'];
+const DEFAULT_CATEGORIES = ['All', 'Prepared Meals', 'Baked Goods', 'Dairy' , 'Produce', 'Pantry', 'Other'];
 
 interface CategoryChipsProps {
   categories?: string[];
@@ -92,7 +92,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingRight: 16,
+    paddingHorizontal: 16
+,
   },
   wrapContainer: {
     flexDirection: 'row',
@@ -105,7 +106,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   chipPill: {
-    paddingHorizontal: 18,
+    paddingHorizontal: 14,
     paddingVertical: 12,
     borderRadius: 100,
   },

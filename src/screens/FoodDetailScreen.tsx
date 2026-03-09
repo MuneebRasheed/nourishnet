@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useThemeStore } from '../../store/themeStore';
+import { useRequestedListingsStore } from '../../store/requestedListingsStore';
 import { getColors, palette } from '../../utils/colors';
 import { useAppFontSizes } from '../../theme/fonts';
 import { fontFamilies } from '../../theme/typography';
@@ -312,7 +313,10 @@ function FoodDetailScreen() {
           ) : (
             <ContinueButton
               label="Request This Food"
-              onPress={() => setRequestSubmitted(true)}
+              onPress={() => {
+                useRequestedListingsStore.getState().addRequestedId(item.id);
+                setRequestSubmitted(true);
+              }}
               isDark={isDark}
               style={styles.requestBtn}
             />
