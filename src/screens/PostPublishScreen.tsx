@@ -68,15 +68,33 @@ export default function PostPublishScreen() {
   const [pickupStart, setPickupStart] = useState<Date | null>(null);
   const [pickupEnd, setPickupEnd] = useState<Date | null>(null);
   const [showTimePickerModal, setShowTimePickerModal] = useState(false);
+  const [timePickerMode, setTimePickerMode] = useState<'start' | 'end' | null>(null);
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
   const [note, setNote] = useState('');
   const [confirmations, setConfirmations] = useState<boolean[]>([false, false, false, false]);
 
-  const openTimePickerModal = () => {
+  const openStartTimePicker = () => {
     if (pickupStart === null) setPickupStart(getDefaultStart());
-    if (pickupEnd === null) setPickupEnd(getDefaultEnd());
+    setTimePickerMode('start');
+    setShowEndPicker(false);
+    setShowStartPicker(true);
     setShowTimePickerModal(true);
+  };
+
+  const openEndTimePicker = () => {
+    if (pickupEnd === null) setPickupEnd(getDefaultEnd());
+    setTimePickerMode('end');
+    setShowStartPicker(false);
+    setShowEndPicker(true);
+    setShowTimePickerModal(true);
+  };
+
+  const closeTimePickerModal = () => {
+    setShowTimePickerModal(false);
+    setTimePickerMode(null);
+    setShowStartPicker(false);
+    setShowEndPicker(false);
   };
 
   const handleStartTimeChange = (_: unknown, date?: Date) => {
@@ -88,11 +106,6 @@ export default function PostPublishScreen() {
     if (Platform.OS === 'android') setShowEndPicker(false);
     if (date) setPickupEnd(date);
   };
-
-  const pickupWindowLabel =
-    pickupStart && pickupEnd
-      ? `${formatTimeForDisplay(pickupStart)} – ${formatTimeForDisplay(pickupEnd)}`
-      : null;
 
   const arrowColor = isDark ? colors.textSecondary : colors.text;
 
@@ -184,55 +197,59 @@ export default function PostPublishScreen() {
         </View>
 
         <View style={styles.fieldGroup}>
-          <TouchableOpacity
-            style={[styles.pickupWindowCard, { backgroundColor: colors.inputFieldBg }]}
-            activeOpacity={0.8}
-            onPress={openTimePickerModal}
-          >
-            <ClockICon
-              width={24}
-              height={24}
-              color={isDark ? colors.text : colors.primary}
-            />
-            <View style={styles.pickupWindowTextWrap}>
-              <Text
-                style={[
-                  styles.pickupWindowLabel,
-                  { color: colors.textSecondary, fontFamily: fontFamilies.inter, fontSize: fonts.caption },
-                ]}
-              >
-                Pickup Window
+          <View style={styles.timeFieldsRow}>
+            <View style={styles.timeFieldHalf}>
+              <Text style={[styles.timeFieldLabel, { color: colors.text, fontFamily: fontFamilies.inter, fontSize: fonts.caption }]}>
+                Start Time
               </Text>
-              <Text
-                style={[
-                  styles.pickupWindowTime,
-                  {
-                    color: pickupWindowLabel ? colors.text : colors.textSecondary,
-                    fontFamily: fontFamilies.interBold,
-                    fontSize: fonts.subhead,
-                  },
-                ]}
+              <TouchableOpacity
+                style={[styles.timeFieldCard, { backgroundColor: colors.inputFieldBg }]}
+                activeOpacity={0.8}
+                onPress={openStartTimePicker}
               >
-                {pickupWindowLabel ?? 'Select time'}
-              </Text>
+                <LocationPin width={20} height={20} color={isDark ? colors.text : colors.primary} />
+                <Text
+                  style={[
+                    styles.timeFieldValue,
+                    { color: pickupStart ? colors.text : colors.textSecondary, fontFamily: fontFamilies.inter, fontSize: fonts.subhead },
+                  ]}
+                >
+                  {pickupStart ? formatTimeForDisplay(pickupStart) : 'Select'}
+                </Text>
+              </TouchableOpacity>
             </View>
-            <MaterialIcons
-              name={showTimePickerModal ? 'keyboard-arrow-up' : 'keyboard-arrow-down'}
-              size={24}
-              color={arrowColor}
-            />
-          </TouchableOpacity>
+            <View style={styles.timeFieldHalf}>
+              <Text style={[styles.timeFieldLabel, { color: colors.text, fontFamily: fontFamilies.inter, fontSize: fonts.caption }]}>
+                End Time
+              </Text>
+              <TouchableOpacity
+                style={[styles.timeFieldCard, { backgroundColor: colors.inputFieldBg }]}
+                activeOpacity={0.8}
+                onPress={openEndTimePicker}
+              >
+                <ClockICon width={20} height={20} color={isDark ? colors.text : colors.primary} />
+                <Text
+                  style={[
+                    styles.timeFieldValue,
+                    { color: pickupEnd ? colors.text : colors.textSecondary, fontFamily: fontFamilies.inter, fontSize: fonts.subhead },
+                  ]}
+                >
+                  {pickupEnd ? formatTimeForDisplay(pickupEnd) : 'Select'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
 
           <Modal
             visible={showTimePickerModal}
             transparent
             animationType="slide"
-            onRequestClose={() => setShowTimePickerModal(false)}
+            onRequestClose={closeTimePickerModal}
           >
             <TouchableOpacity
               style={styles.timePickerOverlay}
               activeOpacity={1}
-              onPress={() => setShowTimePickerModal(false)}
+              onPress={closeTimePickerModal}
             >
               <View
                 style={[styles.timePickerModal, { backgroundColor: colors.background }]}
@@ -244,49 +261,29 @@ export default function PostPublishScreen() {
                     { color: colors.text, fontFamily: fontFamilies.interBold, fontSize: fonts.body },
                   ]}
                 >
-                  Pickup Window
+                  {timePickerMode === 'start' ? 'Start Time' : 'End Time'}
                 </Text>
-                <TouchableOpacity
-                  style={[styles.timePickerRow, { backgroundColor: colors.inputFieldBg }]}
-                  onPress={() => setShowStartPicker(true)}
-                >
-                  <Text style={[styles.timePickerRowLabel, { color: colors.textSecondary, fontFamily: fontFamilies.inter, fontSize: fonts.caption }]}>
-                    Start time
-                  </Text>
-                  <Text style={[styles.timePickerRowValue, { color: colors.text, fontFamily: fontFamilies.interMedium, fontSize: fonts.subhead }]}>
-                    {pickupStart ? formatTimeForDisplay(pickupStart) : '--'}
-                  </Text>
-                </TouchableOpacity>
-                {showStartPicker && Platform.OS === 'ios' && (
+                {timePickerMode === 'start' && Platform.OS === 'ios' && (
                   <DateTimePicker
                     value={pickupStart ?? getDefaultStart()}
                     mode="time"
                     display="spinner"
+                    themeVariant={isDark ? 'dark' : 'light'}
                     onChange={handleStartTimeChange}
                   />
                 )}
-                <TouchableOpacity
-                  style={[styles.timePickerRow, { backgroundColor: colors.inputFieldBg }]}
-                  onPress={() => setShowEndPicker(true)}
-                >
-                  <Text style={[styles.timePickerRowLabel, { color: colors.textSecondary, fontFamily: fontFamilies.inter, fontSize: fonts.caption }]}>
-                    End time
-                  </Text>
-                  <Text style={[styles.timePickerRowValue, { color: colors.text, fontFamily: fontFamilies.interMedium, fontSize: fonts.subhead }]}>
-                    {pickupEnd ? formatTimeForDisplay(pickupEnd) : '--'}
-                  </Text>
-                </TouchableOpacity>
-                {showEndPicker && Platform.OS === 'ios' && (
+                {timePickerMode === 'end' && Platform.OS === 'ios' && (
                   <DateTimePicker
                     value={pickupEnd ?? getDefaultEnd()}
                     mode="time"
                     display="spinner"
+                    themeVariant={isDark ? 'dark' : 'light'}
                     onChange={handleEndTimeChange}
                   />
                 )}
                 <ContinueButton
                   label="Done"
-                  onPress={() => setShowTimePickerModal(false)}
+                  onPress={closeTimePickerModal}
                   isDark={isDark}
                   style={styles.timePickerDoneBtn}
                 />
@@ -343,7 +340,7 @@ export default function PostPublishScreen() {
         <Text
           style={[
             styles.sectionSubtitle,
-            { color: colors.textSecondary, fontFamily: fontFamilies.inter, fontSize: fonts.caption },
+            { color: colors.textSecondary, fontFamily: fontFamilies.inter, fontSize: fonts.caption ,lineHeight:20},
           ]}
         >
           You must confirm each of the following before your listing can be published:
@@ -421,21 +418,25 @@ const styles = StyleSheet.create({
   publishButtonDisabled: {
     opacity: 0.6,
   },
-  pickupWindowCard: {
+  timeFieldsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  timeFieldHalf: {
+    flex: 1,
+  },
+  timeFieldLabel: {
+    marginBottom: 8,
+  },
+  timeFieldCard: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 14,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     borderRadius: 12,
-    gap: 12,
+    gap: 10,
   },
-  pickupWindowTextWrap: {
-    flex: 1,
-  },
-  pickupWindowLabel: {
-    marginBottom: 2,
-  },
-  pickupWindowTime: {},
+  timeFieldValue: {},
   timePickerOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -451,17 +452,6 @@ const styles = StyleSheet.create({
   timePickerModalTitle: {
     marginBottom: 16,
   },
-  timePickerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  timePickerRowLabel: {},
-  timePickerRowValue: {},
   timePickerDoneBtn: {
     marginTop: 16,
     width: '100%',

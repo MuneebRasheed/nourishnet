@@ -4,7 +4,7 @@ import { useNavigation } from '@react-navigation/native'
 import { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useThemeStore } from '../../store/themeStore'
-import { getColors } from '../../utils/colors'
+import { getColors, palette } from '../../utils/colors'
 import { useAppFontSizes } from '../../theme/fonts'
 import { fontFamilies } from '../../theme/typography'
 import ContinueButton from '../components/ContinueButton'
@@ -58,7 +58,7 @@ const ForgotPasswordScreen = () => {
             styles.title,
             {
               color: colors.text,
-              fontFamily: fontFamilies.poppinsSemiBold,
+              fontFamily: fontFamilies.interSemiBold,
               fontSize: fonts.largeTitle,
             },
           ]}
@@ -70,7 +70,7 @@ const ForgotPasswordScreen = () => {
             styles.subtitle,
             {
               color: colors.textSecondary,
-              fontFamily: fontFamilies.poppins,
+              fontFamily: fontFamilies.inter,
               fontSize: fonts.body,
             },
           ]}
@@ -87,7 +87,7 @@ const ForgotPasswordScreen = () => {
             style={[
               styles.errorText,
               {
-                color: '#dc2626',
+                color: palette.logoutColor,
                 fontFamily: fontFamilies.inter,
                 fontSize: fonts.subhead,
               },

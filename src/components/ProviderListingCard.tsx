@@ -41,7 +41,6 @@ export function ProviderListingCard({
   portionsLabel,
   timeRangeLabel,
   address,
-  foodType,
   statusLabel = 'Active',
   statusColor = palette.roleBulbColor2,
   imageSource,
@@ -147,7 +146,7 @@ export function ProviderListingCard({
                   styles.modalMenuPositioned,
                   styles.modalMenuShadow,
                   {
-                    backgroundColor: isDark ? "rgba(255, 255, 255, 0.6)" : "rgba(255, 255, 255, 0.6)",
+                    backgroundColor: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(255, 255, 255, 0.6)",
                     borderColor: colors.borderColor,
                     top: menuLayout.y,
                     left: Math.max(12, menuLayout.x + menuLayout.triggerWidth - MENU_WIDTH),
@@ -194,28 +193,8 @@ export function ProviderListingCard({
                 {portionsLabel}
               </Text>
             </View>
-            {foodType != null && foodType !== '' && (
-              <>
-                <View style={styles.dot} />
-                <View style={styles.metaItem}>
-                  <Text
-                    style={[
-                      styles.metaText,
-                      {
-                        color: colors.textSecondary,
-                        fontFamily: fontFamilies.inter,
-                        fontSize: fonts.caption,
-                      },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {foodType}
-                  </Text>
-                </View>
-              </>
-            )}
-            {/* <View style={styles.dot} /> */}
-            <View style={styles.metaItemTime}>
+            <View style={[styles.dot, { backgroundColor: colors.textSecondary }]} />
+            <View style={styles.metaItem}>
               <ClockICon
                 width={14}
                 height={14}
@@ -228,6 +207,7 @@ export function ProviderListingCard({
                     color: colors.textSecondary,
                     fontFamily: fontFamilies.inter,
                     fontSize: fonts.caption,
+                    lineHeight:20,
                   },
                 ]}
               >
@@ -249,6 +229,7 @@ export function ProviderListingCard({
                   color: colors.textSecondary,
                   fontFamily: fontFamilies.inter,
                   fontSize: fonts.caption,
+                  
                 },
               ]}
               numberOfLines={2}
@@ -390,12 +371,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     flexShrink: 0,
-  },
-  metaItemTime: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    width: '100%',
   },
   metaText: {
     flexShrink: 1,

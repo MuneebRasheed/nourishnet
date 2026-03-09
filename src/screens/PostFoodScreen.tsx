@@ -254,7 +254,7 @@ export default function PostFoodScreen() {
         <Text
           style={[
             styles.sectionTitle,
-            { color: colors.text, fontFamily: fontFamilies.interBold, fontSize: fonts.body },
+            { color: colors.text, fontFamily: fontFamilies.interMedium, fontSize: fonts.subhead },
           ]}
         >
           Dietary Tags
@@ -272,7 +272,7 @@ export default function PostFoodScreen() {
         <Text
           style={[
             styles.sectionTitle,
-            { color: colors.text, fontFamily: fontFamilies.interBold, fontSize: fonts.body },
+            { color: colors.text, fontFamily: fontFamilies.interMedium, fontSize: fonts.subhead },
           ]}
         >
           Allergens

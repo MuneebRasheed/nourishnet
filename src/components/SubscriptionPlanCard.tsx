@@ -166,7 +166,7 @@ export function SubscriptionPlanCard({
           <View style={styles.features}>
             {features.map((f, i) => (
               <View key={i} style={styles.featureRow}>
-                <View style={[styles.tickCircle, { backgroundColor: colors.primary }]}>
+                <View style={[styles.tickCircle, { backgroundColor: palette.greenTickColor }]}>
                   <Ionicons name="checkmark" size={12} color={isDark ? palette.black : palette.white} />
                 </View>
                 <Text

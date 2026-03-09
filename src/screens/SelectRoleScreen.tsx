@@ -41,7 +41,7 @@ const SelectRoleScreen = () => {
               styles.title,
               {
                 color: colors.text,
-                fontFamily: fontFamilies.poppinsBold,
+                fontFamily: fontFamilies.poppinsSemiBold,
                 fontSize: fonts.largeTitle,
               },
             ]}
@@ -53,7 +53,7 @@ const SelectRoleScreen = () => {
               styles.subtitle,
               {
                 color: colors.textSecondary,
-                fontFamily: fontFamilies.inter,
+                fontFamily: fontFamilies.poppins,
                 fontSize: fonts.body,
               },
             ]}

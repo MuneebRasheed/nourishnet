@@ -22,14 +22,18 @@ type Slide = {
 
 const data: Slide[] = [
   {
-    title: 'Discover fresh food from local businesses.',
-    subtitle: 'Browse surplus meals and groceries posted by restaurants and stores near you.',
+    title: 'Post surplus in under 60 seconds.',
+    subtitle: 'Nearby users are notified instantly. No coordination required.',
     image: require('../assets/images/FoodOnboard1.png'),
   },
   {
-    title: 'Save food. Save money. Reduce waste.',
-    subtitle: 'Get great deals on quality food while helping the planet.',
+    title: 'You stay in control',
     image: require('../assets/images/FoodOnboard2.png'),
+    bulletPoints: [
+      'Set pickup window',
+      'Secure PIN verification',
+      'No public sharing of address until claimed',
+    ],
   },
   {
     title: 'Simple. Safe. Sustainable.',

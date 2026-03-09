@@ -54,13 +54,13 @@ export default function HomeHeader({
           <Text
             style={[
               styles.greetingLabel,
-              { color: colors.text, fontFamily: fontFamilies.interMedium, fontSize: fonts.body },
+              { color: colors.text, fontFamily: fontFamilies.interMedium, fontSize: fonts.body+2 },
             ]}
           >
             {displayTitle}
           </Text>
           <View style={styles.locationRow}>
-            <FireStreak width={16} height={16} />
+            <FireStreak width={14} height={14} />
             <Text
               style={[
                 styles.location,
