@@ -38,7 +38,7 @@ function formatTimeForFilter(date: Date): string {
   }).replace(/\s/g, '');
 }
 
-function parseTimeForFilter(s: string): Date | null {
+export function parseTimeForFilter(s: string): Date | null {
   if (!s || typeof s !== 'string') return null;
   const trimmed = s.trim().replace(/\s/g, '');
   const match = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i) ?? trimmed.match(/^(\d{1,2}):(\d{2})(AM|PM)$/i);
@@ -61,7 +61,7 @@ export type FilterState = {
   city: string;
 };
 
-const defaultFilterState: FilterState = {
+export const defaultFilterState: FilterState = {
   foodType: '',
   pickupTimeStart: '03:30PM',
   pickupTimeEnd: '03:30PM',
@@ -73,12 +73,17 @@ interface FilterModalProps {
   visible: boolean;
   onClose: () => void;
   onApply?: (filters: FilterState) => void;
+  onReset?: () => void;
+  /** When provided, modal syncs its state to this when opened (e.g. currently applied filters). */
+  initialFilters?: FilterState | null;
 }
 
 export default function FilterModal({
   visible,
   onClose,
   onApply,
+  onReset,
+  initialFilters,
 }: FilterModalProps) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const colors = getColors(isDark);
@@ -97,6 +102,25 @@ export default function FilterModal({
   );
   const [city, setCity] = useState(defaultFilterState.city);
   const [showTimePickerModal, setShowTimePickerModal] = useState(false);
+
+  // Sync modal state when opened with initialFilters (e.g. currently applied filters)
+  React.useEffect(() => {
+    if (visible && initialFilters !== undefined) {
+      if (initialFilters === null) {
+        setFoodType(defaultFilterState.foodType);
+        setPickupTimeStart(defaultFilterState.pickupTimeStart);
+        setPickupTimeEnd(defaultFilterState.pickupTimeEnd);
+        setAllergens(defaultFilterState.allergens);
+        setCity(defaultFilterState.city);
+      } else {
+        setFoodType(initialFilters.foodType);
+        setPickupTimeStart(initialFilters.pickupTimeStart);
+        setPickupTimeEnd(initialFilters.pickupTimeEnd);
+        setAllergens(initialFilters.allergens);
+        setCity(initialFilters.city);
+      }
+    }
+  }, [visible, initialFilters]);
   const [timePickerMode, setTimePickerMode] = useState<'start' | 'end' | null>(null);
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
@@ -157,6 +181,7 @@ export default function FilterModal({
     setPickupTimeEnd(defaultFilterState.pickupTimeEnd);
     setAllergens(defaultFilterState.allergens);
     setCity(defaultFilterState.city);
+    onReset?.();
   };
 
   const handleApply = () => {

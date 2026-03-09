@@ -13,13 +13,52 @@ import type { ProviderListing } from '../../store/providerListingsStore';
 import { fetchBrowseListingsApi } from '../lib/api/listings';
 import HomeHeader from '../components/HomeHeader';
 import SearchBarWithFilter from '../components/SearchBarWithFilter';
-import FilterModal from '../components/FilterModal';
+import FilterModal, {
+  type FilterState,
+  parseTimeForFilter,
+} from '../components/FilterModal';
 import CategoryChips from '../components/CategoryChips';
 import FoodCard, { FoodCardData } from '../components/FoodCard';
 import BoxIcon from '../assets/svgs/BoxIcon';
 import type { FoodDetailItem } from './FoodDetailScreen';
 
 const DEFAULT_LISTING_IMAGE = require('../assets/images/FoodOnboard1.png');
+
+/** Parse time string to minutes since midnight. Handles "18:00" (24h) and "3:30PM" style. */
+function timeToMinutes(s: string): number | null {
+  if (!s || typeof s !== 'string') return null;
+  const trimmed = s.trim();
+  const match24 = trimmed.match(/^(\d{1,2}):(\d{2})$/);
+  if (match24) {
+    const h = parseInt(match24[1], 10);
+    const m = parseInt(match24[2], 10);
+    if (h >= 0 && h <= 23 && m >= 0 && m <= 59) return h * 60 + m;
+  }
+  const d = parseTimeForFilter(trimmed);
+  return d ? d.getHours() * 60 + d.getMinutes() : null;
+}
+
+/** Parse timeSlot "18:00 - 20:00" to { start, end } in minutes. Returns null if unparseable. */
+function parseTimeSlotMinutes(timeSlot: string): { start: number; end: number } | null {
+  if (!timeSlot || typeof timeSlot !== 'string') return null;
+  const parts = timeSlot.split('-').map((p) => p.trim());
+  if (parts.length !== 2) return null;
+  const start = timeToMinutes(parts[0]);
+  const end = timeToMinutes(parts[1]);
+  if (start == null || end == null) return null;
+  return { start, end };
+}
+
+/** True if listing time slot overlaps filter window [filterStart, filterEnd] (minutes). */
+function timeSlotOverlaps(
+  timeSlot: string,
+  filterStartMinutes: number,
+  filterEndMinutes: number
+): boolean {
+  const slot = parseTimeSlotMinutes(timeSlot);
+  if (!slot) return true;
+  return slot.start < filterEndMinutes && slot.end > filterStartMinutes;
+}
 
 function formatPostedAgo(createdAt: string): string {
   const mins = Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000);
@@ -142,6 +181,7 @@ export default function HomeScreen() {
   const baseList = listingItems.length > 0 ? listingItems : MOCK_FOOD_LIST;
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('All');
+  const [appliedFilters, setAppliedFilters] = useState<FilterState | null>(null);
 
   const displayList = useMemo(() => {
     let list = baseList;
@@ -156,14 +196,47 @@ export default function HomeScreen() {
     }
     // Filter by search
     const q = search.trim().toLowerCase();
-    if (!q) return list;
-    return list.filter(
-      (item) =>
-        item.title.toLowerCase().includes(q) ||
-        (item.source && item.source.toLowerCase().includes(q)) ||
-        (item.dietaryTags?.some((t) => t.toLowerCase().includes(q)))
-    );
-  }, [baseList, search, category]);
+    if (q) {
+      list = list.filter(
+        (item) =>
+          item.title.toLowerCase().includes(q) ||
+          (item.source && item.source.toLowerCase().includes(q)) ||
+          (item.dietaryTags?.some((t) => t.toLowerCase().includes(q)))
+      );
+    }
+    // Filter by modal filters (food type, pickup time, allergens, city)
+    if (appliedFilters) {
+      const { foodType: ft, pickupTimeStart, pickupTimeEnd, allergens: filterAllergens, city: filterCity } = appliedFilters;
+      if (ft && ft.trim()) {
+        const ftNorm = ft.trim().toLowerCase().replace(/\s+/g, ' ');
+        list = list.filter((item) => {
+          const itemFt = (item.foodType ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+          return itemFt === ftNorm || itemFt.replace(/\s/g, '_') === ftNorm.replace(/\s/g, '_');
+        });
+      }
+      const filterStartM = timeToMinutes(pickupTimeStart);
+      const filterEndM = timeToMinutes(pickupTimeEnd);
+      if (filterStartM != null && filterEndM != null) {
+        list = list.filter((item) =>
+          timeSlotOverlaps(item.timeSlot, filterStartM, filterEndM)
+        );
+      }
+      if (filterAllergens.length > 0) {
+        const set = new Set(filterAllergens.map((a) => a.trim().toLowerCase()));
+        list = list.filter((item) => {
+          const itemAllergens = item.allergens ?? [];
+          return !itemAllergens.some((a) => set.has(a.trim().toLowerCase()));
+        });
+      }
+      if (filterCity && filterCity.trim()) {
+        const cityLower = filterCity.trim().toLowerCase();
+        list = list.filter((item) =>
+          (item.pickupAddress ?? '').toLowerCase().includes(cityLower)
+        );
+      }
+    }
+    return list;
+  }, [baseList, search, category, appliedFilters]);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const isRequested = useRequestedListingsStore((s) => s.isRequested);
   const addRequestedId = useRequestedListingsStore((s) => s.addRequestedId);
@@ -277,9 +350,9 @@ export default function HomeScreen() {
       <FilterModal
         visible={filterModalVisible}
         onClose={() => setFilterModalVisible(false)}
-        onApply={(filters) => {
-          // Optional: apply filters to home list
-        }}
+        onApply={(filters) => setAppliedFilters(filters)}
+        onReset={() => setAppliedFilters(null)}
+        initialFilters={appliedFilters}
       />
     </View>
   );
