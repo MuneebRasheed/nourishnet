@@ -95,6 +95,35 @@ export async function deleteListingApi(id: string): Promise<{ error?: string }> 
   return {};
 }
 
+export async function updateListingApi(
+  id: string,
+  draft: ProviderListingDraft
+): Promise<{ listing: ProviderListing | null; error?: string }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/listings/${id}`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({
+      title: draft.title,
+      foodType: draft.foodType,
+      quantity: draft.quantity,
+      quantityUnit: draft.quantityUnit,
+      dietaryTags: draft.dietaryTags,
+      allergens: draft.allergens,
+      pickupAddress: draft.pickupAddress,
+      startTime: draft.startTime,
+      endTime: draft.endTime,
+      note: draft.note,
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return { listing: null, error: data?.error ?? 'Failed to update listing' };
+  }
+  const listing = data.listing ? mapApiToListing(data.listing) : null;
+  return { listing };
+}
+
 export async function completeListingApi(id: string): Promise<{ listing: ProviderListing | null; error?: string }> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE_URL}/listings/${id}`, {

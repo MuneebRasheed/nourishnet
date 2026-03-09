@@ -151,6 +151,17 @@ router.patch('/:id', async (req, res) => {
     if (body.status === 'active' || body.status === 'completed') {
       updates.status = body.status;
     }
+    // Full listing update (for edit flow)
+    if (typeof body.title === 'string' && body.title.trim()) updates.title = body.title.trim();
+    if (body.foodType !== undefined) updates.food_type = typeof body.foodType === 'string' ? body.foodType.trim() || null : null;
+    if (typeof body.quantity === 'string') updates.quantity = body.quantity;
+    if (typeof body.quantityUnit === 'string') updates.quantity_unit = body.quantityUnit;
+    if (Array.isArray(body.dietaryTags)) updates.dietary_tags = body.dietaryTags;
+    if (Array.isArray(body.allergens)) updates.allergens = body.allergens;
+    if (typeof body.pickupAddress === 'string') updates.pickup_address = body.pickupAddress.trim();
+    if (typeof body.startTime === 'string') updates.start_time = body.startTime;
+    if (typeof body.endTime === 'string') updates.end_time = body.endTime;
+    if (typeof body.note === 'string') updates.note = body.note.trim();
 
     const { data, error } = await supabase
       .from('listings')

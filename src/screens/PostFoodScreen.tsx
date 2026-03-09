@@ -116,7 +116,7 @@ export default function PostFoodScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={{ paddingTop: insets.top }}>
         <SettingsHeader
-          title="Post Food"
+          title={editListing ? 'Edit Food' : 'Post Food'}
           onLeftPress={handleBack}
           leftIcon={<ArrowBACK width={32} height={32} color={colors.text} />}
           titleAlign="left"

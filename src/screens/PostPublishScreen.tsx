@@ -29,7 +29,7 @@ import ArrowBACK from '../assets/svgs/ArrowBACK';
 import ClockICon from '../assets/svgs/ClockICon';
 import LocationPin from '../assets/svgs/LocationPin';
 import { useProviderListingsStore } from '../../store/providerListingsStore';
-import { createListingApi } from '../lib/api/listings';
+import { createListingApi, updateListingApi } from '../lib/api/listings';
 
 function formatTimeForDisplay(date: Date): string {
   return date.toLocaleTimeString('en-US', {
@@ -167,25 +167,36 @@ export default function PostPublishScreen() {
     const draft = route.params?.draft;
     if (!draft) return;
 
+    const payload = {
+      title: draft.foodTitle || 'Food name',
+      foodType: draft.foodType,
+      quantity: draft.quantity,
+      quantityUnit: draft.quantityUnit,
+      dietaryTags: draft.dietarySelected,
+      allergens: draft.allergensSelected,
+      pickupAddress,
+      startTime: pickupStart ? formatTimeForDisplay(pickupStart) : '4:00 PM',
+      endTime: pickupEnd ? formatTimeForDisplay(pickupEnd) : '5:30 PM',
+      note,
+    };
+
     setPublishing(true);
     try {
-      const { listing, error } = await createListingApi({
-        title: draft.foodTitle || 'Food name',
-        foodType: draft.foodType,
-        quantity: draft.quantity,
-        quantityUnit: draft.quantityUnit,
-        dietaryTags: draft.dietarySelected,
-        allergens: draft.allergensSelected,
-        pickupAddress,
-        startTime: pickupStart ? formatTimeForDisplay(pickupStart) : '4:00 PM',
-        endTime: pickupEnd ? formatTimeForDisplay(pickupEnd) : '5:30 PM',
-        note,
-      });
-      if (error || !listing) {
-        Alert.alert('Error', error ?? 'Failed to publish. Please try again.');
-        return;
+      if (editListing) {
+        const { listing, error } = await updateListingApi(editListing.id, payload);
+        if (error || !listing) {
+          Alert.alert('Error', error ?? 'Failed to update listing. Please try again.');
+          return;
+        }
+        addListingFromApi(listing);
+      } else {
+        const { listing, error } = await createListingApi(payload);
+        if (error || !listing) {
+          Alert.alert('Error', error ?? 'Failed to publish. Please try again.');
+          return;
+        }
+        addListingFromApi(listing);
       }
-      addListingFromApi(listing);
       navigation.navigate('MainTabs', { screen: 'Home' });
     } catch {
       Alert.alert('Error', 'Something went wrong. Please try again.');
@@ -198,7 +209,7 @@ export default function PostPublishScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={{ paddingTop: insets.top }}>
         <SettingsHeader
-          title="Post Food"
+          title={editListing ? 'Edit Food' : 'Post Food'}
           onLeftPress={handleBack}
           leftIcon={<ArrowBACK width={32} height={32} color={colors.text} />}
           titleAlign="left"
@@ -406,7 +417,7 @@ export default function PostPublishScreen() {
         </View>
 
             <ContinueButton
-              label={publishing ? 'Publishing…' : 'Publish'}
+              label={publishing ? (editListing ? 'Saving…' : 'Publishing…') : (editListing ? 'Save changes' : 'Publish')}
               onPress={handlePublish}
               isDark={isDark}
               style={{
