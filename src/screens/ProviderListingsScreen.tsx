@@ -64,8 +64,7 @@ const navigation = useNavigation<CompositeNavigationProp<ListingsNav, RootNav>>(
   };
 
   const handleEditListing = (listing: ProviderListing) => {
-    // TODO: navigate to edit flow with listing data
-    navigation.navigate('PostFoodScreen');
+    navigation.navigate('PostFoodScreen', { editListing: listing });
   };
 
   const handleDeleteListing = (listing: ProviderListing) => {

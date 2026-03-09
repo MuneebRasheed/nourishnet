@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,8 +8,9 @@ import {
   TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RouteProp } from '@react-navigation/native';
 import { useThemeStore } from '../../store/themeStore';
 import { getColors } from '../../utils/colors';
 import { useAppFontSizes } from '../../theme/fonts';
@@ -43,15 +44,43 @@ export default function PostFoodScreen() {
   const fonts = useAppFontSizes();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const route = useRoute<RouteProp<RootStackParamList, 'PostFoodScreen'>>();
+  const editListing = route.params?.editListing;
 
-  const [foodType, setFoodType] = useState<string | null>(null);
-  const [quantity, setQuantity] = useState('');
-  const [quantityUnit, setQuantityUnit] = useState<string>(QUANTITY_UNITS[0]);
-  const [foodTitle, setFoodTitle] = useState('');
-  const [dietarySelected, setDietarySelected] = useState<string[]>([]);
-  const [allergensSelected, setAllergensSelected] = useState<string[]>([]);
+  const [foodType, setFoodType] = useState<string | null>(editListing?.foodType ?? null);
+  const [quantity, setQuantity] = useState(editListing?.quantity ?? '');
+  const [quantityUnit, setQuantityUnit] = useState<string>(
+    editListing?.quantityUnit && QUANTITY_UNITS.includes(editListing.quantityUnit)
+      ? editListing.quantityUnit
+      : QUANTITY_UNITS[0]
+  );
+  const [foodTitle, setFoodTitle] = useState(editListing?.title ?? '');
+  const [dietarySelected, setDietarySelected] = useState<string[]>(editListing?.dietaryTags ?? []);
+  const [allergensSelected, setAllergensSelected] = useState<string[]>(editListing?.allergens ?? []);
   const [showFoodTypeOptions, setShowFoodTypeOptions] = useState(false);
   const [showQuantityUnitOptions, setShowQuantityUnitOptions] = useState(false);
+
+  useEffect(() => {
+    if (editListing) {
+      setFoodType(editListing.foodType ?? null);
+      setQuantity(editListing.quantity ?? '');
+      setQuantityUnit(
+        editListing.quantityUnit && QUANTITY_UNITS.includes(editListing.quantityUnit)
+          ? editListing.quantityUnit
+          : QUANTITY_UNITS[0]
+      );
+      setFoodTitle(editListing.title ?? '');
+      setDietarySelected(editListing.dietaryTags ?? []);
+      setAllergensSelected(editListing.allergens ?? []);
+    } else {
+      setFoodType(null);
+      setQuantity('');
+      setQuantityUnit(QUANTITY_UNITS[0]);
+      setFoodTitle('');
+      setDietarySelected([]);
+      setAllergensSelected([]);
+    }
+  }, [editListing]);
 
   const handleBack = () => {
     if (navigation.canGoBack()) navigation.goBack();
@@ -78,7 +107,7 @@ export default function PostFoodScreen() {
       dietarySelected,
       allergensSelected,
     };
-    navigation.navigate('PostPublishScreen', { draft });
+    navigation.navigate('PostPublishScreen', { draft, editListing: editListing ?? undefined });
   };
 
   const arrowColor = isDark ? colors.textSecondary : colors.text;

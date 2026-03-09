@@ -16,6 +16,7 @@ import ReceiptOnBoardScreen from '../screens/ReceiptOnBoardScreen';
 import FoodOnBoardScreen from '../screens/FoodOnBoardScreen';
 import FoodDetailScreen, { FoodDetailItem } from '../screens/FoodDetailScreen';
 import PostFoodScreen, { PostFoodDraft } from '../screens/PostFoodScreen';
+import type { ProviderListing } from '../../store/providerListingsStore';
 import PostPublishScreen from '../screens/PostPublishScreen';
 import QRCodeScreen from '../screens/QRCodeScreen';
 import MainTabNavigator, { MainTabParamList } from './MainTabNavigator';
@@ -48,8 +49,8 @@ export type RootStackParamList = {
   NotificationSettingsScreen: undefined;
   FoodOnBoardScreen: { role?: AuthRole } | undefined;
   FoodDetailScreen: { item: FoodDetailItem };
-  PostFoodScreen: undefined;
-  PostPublishScreen: { draft: PostFoodDraft } | undefined;
+  PostFoodScreen: { editListing?: ProviderListing } | undefined;
+  PostPublishScreen: { draft: PostFoodDraft; editListing?: ProviderListing } | undefined;
   QRCodeScreen: undefined;
   ListingRequestsScreen: { listingId: string; listingTitle: string };
   SubscriptionManagementScreen: undefined;

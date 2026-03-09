@@ -82,8 +82,8 @@ export default function ProviderHomeScreen() {
     navigation.navigate('PostFoodScreen');
   };
 
-  const handleEditListing = (_listing: ProviderListing) => {
-    navigation.navigate('PostFoodScreen');
+  const handleEditListing = (listing: ProviderListing) => {
+    navigation.navigate('PostFoodScreen', { editListing: listing });
   };
 
   const handleDeleteListing = (listing: ProviderListing) => {

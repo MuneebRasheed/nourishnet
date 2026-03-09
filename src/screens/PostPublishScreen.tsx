@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Alert,
   StyleSheet,
@@ -39,6 +39,22 @@ function formatTimeForDisplay(date: Date): string {
   });
 }
 
+/** Parse "4:00 PM" / "11:30 AM" style string to Date (today with that time). */
+function parseTimeStringToDate(s: string): Date | null {
+  if (!s || typeof s !== 'string') return null;
+  const trimmed = s.trim();
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) return null;
+  let hour = parseInt(match[1], 10);
+  const minute = parseInt(match[2], 10);
+  const isPM = match[3].toUpperCase() === 'PM';
+  if (isPM && hour !== 12) hour += 12;
+  if (!isPM && hour === 12) hour = 0;
+  const d = new Date();
+  d.setHours(hour, minute, 0, 0);
+  return d;
+}
+
 const SAFETY_ITEMS = [
   'I confirm this food was handled safely and in accordance with local health and food safety regulations.',
   'This food is within local food donation guidelines applicable to my jurisdiction.',
@@ -54,10 +70,10 @@ export default function PostPublishScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'PostPublishScreen'>>();
+  const editListing = route.params?.editListing;
   const addListingFromApi = useProviderListingsStore((s) => s.addListingFromApi);
   const [publishing, setPublishing] = useState(false);
 
-  const [pickupAddress, setPickupAddress] = useState('');
   const getDefaultStart = () => {
     const d = new Date();
     d.setHours(16, 0, 0, 0);
@@ -68,14 +84,34 @@ export default function PostPublishScreen() {
     d.setHours(17, 30, 0, 0);
     return d;
   };
-  const [pickupStart, setPickupStart] = useState<Date | null>(null);
-  const [pickupEnd, setPickupEnd] = useState<Date | null>(null);
+
+  const [pickupAddress, setPickupAddress] = useState(editListing?.pickupAddress ?? '');
+  const [pickupStart, setPickupStart] = useState<Date | null>(() =>
+    editListing?.startTime ? parseTimeStringToDate(editListing.startTime) : null
+  );
+  const [pickupEnd, setPickupEnd] = useState<Date | null>(() =>
+    editListing?.endTime ? parseTimeStringToDate(editListing.endTime) : null
+  );
   const [showTimePickerModal, setShowTimePickerModal] = useState(false);
   const [timePickerMode, setTimePickerMode] = useState<'start' | 'end' | null>(null);
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
-  const [note, setNote] = useState('');
+  const [note, setNote] = useState(editListing?.note ?? '');
   const [confirmations, setConfirmations] = useState<boolean[]>([false, false, false, false]);
+
+  useEffect(() => {
+    if (editListing) {
+      setPickupAddress(editListing.pickupAddress ?? '');
+      setPickupStart(editListing.startTime ? parseTimeStringToDate(editListing.startTime) : null);
+      setPickupEnd(editListing.endTime ? parseTimeStringToDate(editListing.endTime) : null);
+      setNote(editListing.note ?? '');
+    } else {
+      setPickupAddress('');
+      setPickupStart(null);
+      setPickupEnd(null);
+      setNote('');
+    }
+  }, [editListing]);
 
   const openStartTimePicker = () => {
     if (pickupStart === null) setPickupStart(getDefaultStart());
