@@ -144,15 +144,26 @@ export default function HomeScreen() {
   const [category, setCategory] = useState('All');
 
   const displayList = useMemo(() => {
+    let list = baseList;
+    // Filter by category (e.g. Prepared Meals, Baked Goods, Produce)
+    if (category && category !== 'All') {
+      const catLower = category.toLowerCase();
+      list = list.filter((item) => {
+        const ft = (item.foodType ?? '').trim().toLowerCase();
+        if (!ft) return catLower === 'other'; // Items without foodType show under "Other"
+        return ft === catLower || ft.replace(/\s+/g, '_') === catLower.replace(/\s+/g, '_');
+      });
+    }
+    // Filter by search
     const q = search.trim().toLowerCase();
-    if (!q) return baseList;
-    return baseList.filter(
+    if (!q) return list;
+    return list.filter(
       (item) =>
         item.title.toLowerCase().includes(q) ||
         (item.source && item.source.toLowerCase().includes(q)) ||
         (item.dietaryTags?.some((t) => t.toLowerCase().includes(q)))
     );
-  }, [baseList, search]);
+  }, [baseList, search, category]);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const isRequested = useRequestedListingsStore((s) => s.isRequested);
   const addRequestedId = useRequestedListingsStore((s) => s.addRequestedId);
@@ -194,7 +205,7 @@ export default function HomeScreen() {
                 { color: colors.text, fontFamily: fontFamilies.interBold, fontSize: fonts.body },
               ]}
             >
-              All
+              {category === 'All' ? 'All' : category}
             </Text>
             <View style={[styles.availableBadge, { backgroundColor: colors.primary }]}>
               <Text style={[styles.availableText, { fontFamily: fontFamilies.interMedium, fontSize: fonts.caption }]}>
