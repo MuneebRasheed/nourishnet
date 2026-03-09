@@ -26,6 +26,7 @@ import ContinueButton from '../components/ContinueButton';
 import { AuthInput } from '../components/AuthInput';
 import ConfirmationCheckbox from '../components/ConfirmationCheckbox';
 import ArrowBACK from '../assets/svgs/ArrowBACK';
+import ArrowDown from '../assets/svgs/ArrowDown';
 import ClockICon from '../assets/svgs/ClockICon';
 import LocationPin from '../assets/svgs/LocationPin';
 import { useProviderListingsStore } from '../../store/providerListingsStore';
@@ -250,7 +251,7 @@ export default function PostPublishScreen() {
             placeholder="Enter pickup address"
             value={pickupAddress}
             onChangeText={setPickupAddress}
-            leftIcon={<LocationPin width={20} height={20} color={colors.textSecondary} />}
+            leftIcon={<LocationPin width={20} height={20} color={colors.text} />}
             containerStyle={styles.authInputContainer}
           />
         </View>
@@ -258,7 +259,7 @@ export default function PostPublishScreen() {
         <View style={styles.fieldGroup}>
           <View style={styles.timeFieldsRow}>
             <View style={styles.timeFieldHalf}>
-              <Text style={[styles.timeFieldLabel, { color: colors.text, fontFamily: fontFamilies.inter, fontSize: fonts.caption }]}>
+              <Text style={[styles.timeFieldLabel, { color: colors.text, fontFamily: fontFamilies.interMedium, fontSize: fonts.caption }]}>
                 Start Time
               </Text>
               <TouchableOpacity
@@ -266,19 +267,22 @@ export default function PostPublishScreen() {
                 activeOpacity={0.8}
                 onPress={openStartTimePicker}
               >
-                <LocationPin width={20} height={20} color={isDark ? colors.text : colors.primary} />
-                <Text
-                  style={[
-                    styles.timeFieldValue,
-                    { color: pickupStart ? colors.text : colors.textSecondary, fontFamily: fontFamilies.inter, fontSize: fonts.subhead },
-                  ]}
-                >
-                  {pickupStart ? formatTimeForDisplay(pickupStart) : 'Select'}
-                </Text>
+                <LocationPin width={20} height={20} color={colors.text} />
+                <View style={styles.timeFieldValueWrap}>
+                  <Text
+                    style={[
+                      styles.timeFieldValue,
+                      { color: colors.text, fontFamily: fontFamilies.inter, fontSize: fonts.subhead },
+                    ]}
+                  >
+                    {pickupStart ? formatTimeForDisplay(pickupStart) : 'Select'}
+                  </Text>
+                </View>
+                <ArrowDown width={20} height={20} color={colors.text} />
               </TouchableOpacity>
             </View>
             <View style={styles.timeFieldHalf}>
-              <Text style={[styles.timeFieldLabel, { color: colors.text, fontFamily: fontFamilies.inter, fontSize: fonts.caption }]}>
+              <Text style={[styles.timeFieldLabel, { color: colors.text, fontFamily: fontFamilies.interMedium, fontSize: fonts.caption }]}>
                 End Time
               </Text>
               <TouchableOpacity
@@ -286,15 +290,18 @@ export default function PostPublishScreen() {
                 activeOpacity={0.8}
                 onPress={openEndTimePicker}
               >
-                <ClockICon width={20} height={20} color={isDark ? colors.text : colors.primary} />
-                <Text
-                  style={[
-                    styles.timeFieldValue,
-                    { color: pickupEnd ? colors.text : colors.textSecondary, fontFamily: fontFamilies.inter, fontSize: fonts.subhead },
-                  ]}
-                >
-                  {pickupEnd ? formatTimeForDisplay(pickupEnd) : 'Select'}
-                </Text>
+                <ClockICon width={20} height={20} color={colors.text} />
+                <View style={styles.timeFieldValueWrap}>
+                  <Text
+                    style={[
+                      styles.timeFieldValue,
+                      { color: colors.text, fontFamily: fontFamilies.inter, fontSize: fonts.subhead },
+                    ]}
+                  >
+                    {pickupEnd ? formatTimeForDisplay(pickupEnd) : 'Select'}
+                  </Text>
+                </View>
+                <ArrowDown width={20} height={20} color={colors.text} />
               </TouchableOpacity>
             </View>
           </View>
@@ -494,6 +501,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 12,
     gap: 10,
+  },
+  timeFieldValueWrap: {
+    flex: 1,
   },
   timeFieldValue: {},
   timePickerOverlay: {

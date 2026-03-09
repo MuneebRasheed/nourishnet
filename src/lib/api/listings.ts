@@ -1,6 +1,6 @@
 import { supabase } from '../supabase';
 import { API_BASE_URL } from './client';
-import type { ProviderListing, ProviderListingDraft } from '../../store/providerListingsStore';
+import type { ProviderListing, ProviderListingDraft } from '../../../store/providerListingsStore';
 
 /** Shape returned by the server (Supabase snake_case) */
 type ApiListing = {
@@ -77,6 +77,17 @@ export async function fetchListingsApi(status?: 'active' | 'completed'): Promise
   const headers = await getAuthHeaders();
   const url = status ? `${API_BASE_URL}/listings?status=${status}` : `${API_BASE_URL}/listings`;
   const res = await fetch(url, { method: 'GET', headers });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return { listings: [], error: data?.error ?? 'Failed to fetch listings' };
+  }
+  const listings = (data.listings ?? []).map(mapApiToListing);
+  return { listings };
+}
+
+export async function fetchBrowseListingsApi(): Promise<{ listings: ProviderListing[]; error?: string }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/listings/browse`, { method: 'GET', headers });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     return { listings: [], error: data?.error ?? 'Failed to fetch listings' };

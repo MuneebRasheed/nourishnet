@@ -95,6 +95,36 @@ router.get('/', async (req, res) => {
   }
 });
 
+// ---------- Browse all active listings (GET /listings/browse) - for recipients ----------
+router.get('/browse', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const supabase = getSupabaseWithAuth(authHeader);
+    if (!supabase) {
+      return send(res, { error: 'Missing or invalid Authorization header' }, 401);
+    }
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user?.id) {
+      return send(res, { error: 'Invalid token or user not found' }, 401);
+    }
+
+    const { data, error } = await supabase
+      .from('listings')
+      .select('*')
+      .eq('status', 'active')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('[listings GET /browse]', error);
+      return send(res, { error: error.message ?? 'Failed to fetch listings' }, 500);
+    }
+    return send(res, { listings: data ?? [] }, 200);
+  } catch (e) {
+    console.error('[listings GET /browse]', e);
+    return send(res, { error: 'Something went wrong' }, 500);
+  }
+});
+
 // ---------- Delete listing (DELETE /listings/:id) ----------
 router.delete('/:id', async (req, res) => {
   try {

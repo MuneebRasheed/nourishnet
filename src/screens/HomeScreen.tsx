@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { StyleSheet, Text, View, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -8,7 +8,8 @@ import { getColors, palette } from '../../utils/colors';
 import { useAppFontSizes } from '../../theme/fonts';
 import { fontFamilies } from '../../theme/typography';
 import { RootStackParamList } from '../navigations/RootNavigation';
-import { useProviderListingsStore, type ProviderListing } from '../../store/providerListingsStore';
+import type { ProviderListing } from '../../store/providerListingsStore';
+import { fetchBrowseListingsApi } from '../lib/api/listings';
 import HomeHeader from '../components/HomeHeader';
 import SearchBarWithFilter from '../components/SearchBarWithFilter';
 import FilterModal from '../components/FilterModal';
@@ -100,10 +101,25 @@ export default function HomeScreen() {
   const fonts = useAppFontSizes();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const allListings = useProviderListingsStore((s) => s.listings);
+  const [browseListings, setBrowseListings] = useState<ProviderListing[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      const { listings, error } = await fetchBrowseListingsApi();
+      if (!cancelled) {
+        setBrowseListings(error ? [] : listings);
+      }
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const activeListings = useMemo(
-    () => allListings.filter((l) => l.status === 'active'),
-    [allListings]
+    () => browseListings.filter((l) => l.status === 'active'),
+    [browseListings]
   );
   const listingItems = useMemo(
     () => activeListings.map(providerListingToDetailItem),
