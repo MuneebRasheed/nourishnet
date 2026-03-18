@@ -168,6 +168,86 @@ export async function verifyPickupPinApi(
   return { result: data ?? null };
 }
 
+/** Row shape returned by get_my_requests RPC (Supabase snake_case). */
+type MyRequestRow = {
+  request_id: string;
+  listing_id: string;
+  request_status: string;
+  request_created_at: string;
+  listing_title: string | null;
+  food_type: string | null;
+  quantity: string | null;
+  quantity_unit: string | null;
+  dietary_tags: string[] | null;
+  allergens: string[] | null;
+  pickup_address: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  note: string | null;
+  listing_status: string;
+  listing_created_at: string;
+};
+
+/** One request with listing data for My Requests screen (id = listing_id for navigation). */
+export type MyRequestItem = {
+  id: string;
+  title: string;
+  source: string;
+  distance: string;
+  postedAgo: string;
+  portions: string;
+  timeSlot: string;
+  dietaryTags?: string[];
+  listingStatus: string;
+};
+
+function formatPostedAgo(createdAt: string): string {
+  const mins = Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days > 1 ? 's' : ''} ago`;
+}
+
+function rowToMyRequestItem(row: MyRequestRow): MyRequestItem {
+  return {
+    id: row.listing_id,
+    title: row.listing_title ?? '',
+    source: 'Provider',
+    distance: '—',
+    postedAgo: formatPostedAgo(row.listing_created_at),
+    portions: [row.quantity ?? '', row.quantity_unit ?? 'Portions'].filter(Boolean).join(' ') || '0 Portions',
+    timeSlot: [row.start_time, row.end_time].filter(Boolean).join(' - ') || '—',
+    dietaryTags: row.dietary_tags?.length ? row.dietary_tags : undefined,
+    listingStatus: row.listing_status,
+  };
+}
+
+export async function fetchMyRequestsApi(): Promise<{
+  active: MyRequestItem[];
+  completed: MyRequestItem[];
+  error?: string;
+}> {
+  const { data, error } = await supabase.rpc('get_my_requests');
+  if (error) {
+    return { active: [], completed: [], error: error.message ?? 'Failed to fetch my requests' };
+  }
+  const rows = (Array.isArray(data) ? data : []) as MyRequestRow[];
+  const active: MyRequestItem[] = [];
+  const completed: MyRequestItem[] = [];
+  for (const row of rows) {
+    const item = rowToMyRequestItem(row);
+    if (row.listing_status === 'completed') {
+      completed.push(item);
+    } else {
+      active.push(item);
+    }
+  }
+  return { active, completed };
+}
+
 export async function deleteListingApi(id: string): Promise<{ error?: string }> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE_URL}/listings/${id}`, { method: 'DELETE', headers });

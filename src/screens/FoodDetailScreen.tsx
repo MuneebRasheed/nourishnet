@@ -86,7 +86,6 @@ function FoodDetailScreen() {
       Alert.alert('Invalid PIN', error);
       return;
     }
-    useRequestedListingsStore.getState().markRequestCompleted(item.id);
     closeVerifyPickupModal();
     setShowPickupVerifiedModal(true);
   };
@@ -343,14 +342,14 @@ function FoodDetailScreen() {
                 if (error || !request) {
                   // Already requested or listing not requestable: refresh UI, no error modal.
                   if (error === 'listing_not_requestable') {
-                    useRequestedListingsStore.getState().addRequestedItem(item);
+                    useRequestedListingsStore.getState().addRequestedId(item.id);
                     setRequestSubmitted(true);
                     return;
                   }
                   Alert.alert('Error', error ?? 'Failed to request this food. Please try again.');
                   return;
                 }
-                useRequestedListingsStore.getState().addRequestedItem(item);
+                useRequestedListingsStore.getState().addRequestedId(item.id);
                 setRequestSubmitted(true);
               }}
               isDark={isDark}

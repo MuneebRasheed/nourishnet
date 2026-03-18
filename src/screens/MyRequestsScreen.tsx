@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,9 +6,10 @@ import {
   ScrollView,
   TouchableOpacity,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useThemeStore } from '../../store/themeStore';
 import { useRequestedListingsStore } from '../../store/requestedListingsStore';
@@ -19,6 +20,9 @@ import { RootStackParamList } from '../navigations/RootNavigation';
 import SettingsHeader from '../components/SettingsHeader';
 import FoodCard, { type FoodCardData } from '../components/FoodCard';
 import CheckMarkHeart from '../assets/svgs/CheckMarkHeart';
+import { fetchMyRequestsApi, type MyRequestItem } from '../lib/api/listings';
+
+const DEFAULT_LISTING_IMAGE = require('../assets/images/FoodOnboard1.png');
 
 export default function MyRequestsScreen() {
   const theme = useThemeStore((s) => s.theme);
@@ -27,9 +31,32 @@ export default function MyRequestsScreen() {
   const fonts = useAppFontSizes();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const setRequestedIds = useRequestedListingsStore((s) => s.setRequestedIds);
   const [activeTab, setActiveTab] = useState<'Active' | 'Completed'>('Active');
-  const requestedItems = useRequestedListingsStore((s) => s.requestedItems);
-  const completedIds = useRequestedListingsStore((s) => s.completedIds);
+  const [activeRequests, setActiveRequests] = useState<MyRequestItem[]>([]);
+  const [completedRequests, setCompletedRequests] = useState<MyRequestItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadMyRequests = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const { active, completed, error: err } = await fetchMyRequestsApi();
+    setLoading(false);
+    if (err) {
+      setError(err);
+      return;
+    }
+    setActiveRequests(active);
+    setCompletedRequests(completed);
+    setRequestedIds([...active, ...completed].map((r) => r.id));
+  }, [setRequestedIds]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadMyRequests();
+    }, [loadMyRequests])
+  );
 
   const headerTop = Platform.select({
     ios: insets.top,
@@ -37,9 +64,13 @@ export default function MyRequestsScreen() {
     default: insets.top,
   });
 
-  const activeRequests = requestedItems.filter((i) => !completedIds.has(i.id));
-  const completedRequests = requestedItems.filter((i) => completedIds.has(i.id));
   const requests = activeTab === 'Active' ? activeRequests : completedRequests;
+
+  const toCardItem = (item: MyRequestItem): FoodCardData => ({
+    ...item,
+    image: DEFAULT_LISTING_IMAGE,
+    isLive: false,
+  });
 
   return (
     <View style={[styles.container, {  backgroundColor: colors.background }]}>
@@ -81,12 +112,22 @@ export default function MyRequestsScreen() {
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
-          requests.length === 0 && styles.scrollContentEmpty,
+          (loading || requests.length === 0) && styles.scrollContentEmpty,
           { paddingBottom: insets.bottom + 100 },
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {requests.length === 0 ? (
+        {loading ? (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+        ) : error ? (
+          <View style={styles.emptyState}>
+            <Text style={[styles.emptyTitle, { color: colors.text, fontFamily: fontFamilies.interSemiBold, fontSize: fonts.body + 2 }]}>
+              {error}
+            </Text>
+          </View>
+        ) : requests.length === 0 ? (
           <View style={styles.emptyState}>
             <CheckMarkHeart width={64} height={64} color={colors.textSecondary}/>
             <View style={styles.emptyStateContent}>
@@ -126,7 +167,7 @@ export default function MyRequestsScreen() {
           requests.map((item) => (
             <View key={item.id} style={styles.cardWrap}>
               <FoodCard
-                item={{ ...item, isLive: false } as FoodCardData}
+                item={toCardItem(item)}
                 claimLabel={activeTab === 'Completed' ? 'Completed' : 'Request Submitted'}
                 claimButtonVariant="outline"
                 claimButtonBgColor={colors.inputFieldBg}
@@ -134,7 +175,7 @@ export default function MyRequestsScreen() {
                 claimIconColor={colors.textSecondary}
                 viewDetailLabel="View Detail"
                 onViewDetail={() =>
-                  navigation.navigate('FoodDetailScreen', { item: { ...item } })
+                  navigation.navigate('FoodDetailScreen', { item: toCardItem(item) })
                 }
               />
             </View>
@@ -178,6 +219,11 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 16,
     paddingTop: 8,
+  },
+  loadingWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   cardWrap: {},
   scrollContentEmpty: {

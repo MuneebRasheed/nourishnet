@@ -20,7 +20,6 @@ import { useAppFontSizes } from '../../theme/fonts';
 import { useThemeStore } from '../../store/themeStore';
 import { getColors, palette } from '../../utils/colors';
 import type { RootStackParamList } from '../navigations/RootNavigation';
-import { useRequestedListingsStore } from '../../store/requestedListingsStore';
 import { generatePickupPinApi, verifyPickupPinApi } from '../lib/api/listings';
 import { PickupVerifiedModal } from '../components/PickupVerifiedModal';
 
@@ -63,12 +62,13 @@ function QRCodeScreen() {
       setPinLoading(true);
       const { pin: newPin, error } = await generatePickupPinApi(listingIdFromRoute);
       if (cancelled) return;
-      setPinLoading(false);
       if (error || !newPin) {
+        setPinLoading(false);
         Alert.alert('Unable to generate PIN', error ?? 'Please try again.');
         return;
       }
       setPin(newPin);
+      setPinLoading(false);
     })();
 
     return () => {
@@ -166,7 +166,6 @@ function QRCodeScreen() {
       return;
     }
 
-    useRequestedListingsStore.getState().markRequestCompleted(listingId);
     setShowPickupVerifiedModal(true);
   };
 
@@ -197,13 +196,13 @@ function QRCodeScreen() {
 
           <View style={[styles.qrCard, { backgroundColor: palette.white, borderColor: colors.borderColor }]}>
             {pinLoading ? (
-              <Text style={[styles.loadingText, { color: '#111', fontFamily: fontFamilies.inter, fontSize: fonts.body }]}>
-                Generating QR…
+              <Text style={[styles.loadingText, { color: colors.text, fontFamily: fontFamilies.inter, fontSize: fonts.body }]}>
+                Generating QR...
               </Text>
-            ) : qrValue ? (
+            ) : pin ? (
               <QRCode value={qrValue} size={240} />
             ) : (
-              <Text style={[styles.loadingText, { color: '#111', fontFamily: fontFamilies.inter, fontSize: fonts.body }]}>
+              <Text style={[styles.loadingText, { color: colors.textSecondary ?? colors.text, fontFamily: fontFamilies.inter, fontSize: fonts.body }]}>
                 Unable to generate QR.
               </Text>
             )}
