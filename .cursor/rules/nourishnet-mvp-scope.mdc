@@ -1,0 +1,154 @@
+---
+description: NourishNet MVP client scope — product flow, features, fairness, trust, and requirements. Use for all prompts about scope, features, or product decisions.
+alwaysApply: true
+---
+
+# NourishNet MVP — Client Scope
+
+**Tagline:** "Nourishing communities, together."
+
+**Flow:** Providers + Recipients only (no other roles in core MVP).
+
+---
+
+## Core Flow
+
+1. **Provider posts surplus** — quantity, pickup address, pickup window, categories, allergens
+2. **Recipients receive push notification** — based on city/radius + preferences
+3. **Recipient requests/claims** — either instant claim OR 2–5 minute request window (recommended for fairness)
+4. **Recipient picks up** — at provider location, within time window
+5. **Verification at pickup** — simplest: PIN shown by provider (recipient enters in app); OR "I picked up" + optional photo (less secure)
+6. **Impact is logged** — meals rescued + optional appreciation note (anonymous)
+
+---
+
+## Must-Have Features
+
+### Provider
+- Auth (phone/email)
+- Create listing in <60 seconds
+- Manage listings (edit/cancel/expire)
+- View "picked up / not picked up"
+- Basic reports (count + simple weekly email)
+
+### Recipient
+- Auth (phone OTP)
+- Notification settings (city/radius/categories/quiet hours)
+- Listings feed + map
+- Claim/request flow
+- Pickup verification (PIN)
+- My history + impact
+- Optional appreciation notes
+
+### Admin
+- Provider verification (basic)
+- Disputes/reports
+- Basic analytics dashboard
+
+---
+
+## Fairness
+
+- **Daily/weekly caps** — e.g., 1/day, 3/week
+- **Request window + fair selection** for high-demand posts
+- **Cooldown for no-shows** — claim but don't pick up
+- **"Need food today" toggle (Demand Pulse)** — used as a weight, not a gate
+
+---
+
+## Feature Set (Reference)
+
+- **Food Listing:** Food type (prepared, produce, baked goods), quantity (meals/boxes), pickup window countdown, location auto-filled
+- **Smart Alerts:** "Food available within 1 mile", "Pickup closing in 20 minutes", priority alerts for high-need users
+- **Claim & Pickup:** One-tap claim, navigation link, QR code or pickup PIN, photo confirmation
+- **Trust & Safety:** Basic ratings (no public shaming), food safety guidelines, flag/report flow, repeat trusted partners
+- **Impact Tracking:** Meals saved, pounds rescued, CO₂ equivalent, streaks & badges
+
+---
+
+## Required Fair Use Policy
+
+Include: claim limits, no resale of food, no account farming, no discrimination or harassment, consequences for no-shows.
+
+**Enforcement:** Cooldowns, temporary suspensions, admin review queue, device/phone number safeguards.
+
+---
+
+## Enhanced Alerts
+
+- Priority alerts for users marked "high need"
+- Quiet hours
+- Category-based alerts (prepared meals, produce, baby food, halal/vegan, etc.)
+- Predictive: "This bakery usually posts at 8:30pm — stay ready"
+
+---
+
+## AI-Assisted Matching (Fairness)
+
+- Match food type → recipient needs; distance → fastest pickup; quantity → household size
+
+---
+
+## Micro-Communities & Neighborhood Circles
+
+- Apartment complex, church/mosque/temple, college campus, parent groups, senior support circles
+- Share internal food alerts, assign trusted volunteers, coordinate pickups, quiet accountability
+
+---
+
+## For Restaurants & Stores
+
+- One-tap repost from yesterday's listing, auto-suggest quantities, "Closing soon?" quick post, donation summaries, printable/downloadable tax receipts
+
+---
+
+## Impact Dashboard
+
+- Meals rescued, families helped, food waste prevented, CO₂ equivalent, personal timeline, community milestones
+- Shareable cards: "Our block rescued 312 meals this month."
+
+---
+
+## Demand Pulse
+
+- "I need food today" toggle — expires end of day (local), optional and anonymous by default, feeds city/circle demand counter, helps routing + donor awareness
+
+---
+
+## Private Impact Notes
+
+- After completed pickup: one-tap optional "Would you like to send a note of appreciation?"
+- Quick taps or short message (max 240 chars), anonymous by default
+- Visible to: donor organization, admin dashboards — not public
+
+---
+
+## Basic Business Identity (Paid Tier)
+
+- Business/org name, type (Restaurant/Bakery/Café, Grocery, Church, School, Community Org/Pantry), primary contact name, email, OTP-verified phone
+- **Location & Pickup:** Address, city, state, ZIP, pickup instructions, typical days/times, parking notes
+- **Food Safety:** Required checkbox acknowledging local food safety guidelines
+- **Posting Preferences:** Surplus categories, allergens, most common posting time, "Usually perishable?" toggle
+- **Impact & Visibility:** Monthly impact summary?, anonymous appreciation notes?, report format (email PDF / in-app)
+- **Billing (Paid):** Card, billing email, monthly/annual, tax-exempt checkbox
+- **Staff Access:** Invite staff emails, roles (poster/admin); after onboarding: "Verified Partner" badge, volume-based trust score
+
+**One-line during registration:** "We only ask for what's needed to coordinate safe, reliable food pickups."
+
+---
+
+## Privacy & Data (CRITICAL)
+
+- Comply with GDPR (EU), CCPA/CPRA (California), and general privacy laws
+- Required: Privacy Policy, Data Retention Policy, user consent for location, notifications, optional photos
+
+---
+
+## Mobile vs Web/Admin
+
+- **Mobile:** Provider post flow, recipient feed + claim, verification entry, settings + impact
+- **Web/Admin:** Provider approvals, reports queue, dashboard stats
+
+---
+
+When implementing or discussing features, align with this scope. Prioritize MVP (Providers + Recipients, core flow, fairness, PIN verification, impact logging) and reference the full feature set for consistency.
