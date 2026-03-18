@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Alert, StyleSheet, Text, View, ScrollView, RefreshControl } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -10,7 +10,7 @@ import { useAppFontSizes } from '../../theme/fonts';
 import { fontFamilies } from '../../theme/typography';
 import { RootStackParamList } from '../navigations/RootNavigation';
 import type { ProviderListing } from '../../store/providerListingsStore';
-import { fetchBrowseListingsApi, requestClaimApi } from '../lib/api/listings';
+import { fetchBrowseListingsApi } from '../lib/api/listings';
 import HomeHeader from '../components/HomeHeader';
 import SearchBarWithFilter from '../components/SearchBarWithFilter';
 import FilterModal, {
@@ -210,7 +210,6 @@ export default function HomeScreen() {
   }, [baseList, search, category, appliedFilters]);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const isRequested = useRequestedListingsStore((s) => s.isRequested);
-  const addRequestedId = useRequestedListingsStore((s) => s.addRequestedId);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -294,27 +293,44 @@ export default function HomeScreen() {
             ) : (
               displayList.map((item) => {
                 const requested = isRequested(item.id);
+
+                const handlePress = () => {
+                  // Card button only navigates to detail; user submits request on detail screen
+                  navigation.navigate('FoodDetailScreen', { item });
+                };
+
                 return (
-                  <FoodCard
-                    key={item.id}
-                    item={item as FoodCardData}
-                    claimLabel={requested ? 'Request Submitted' : 'Request This Food'}
-                    claimButtonVariant={requested ? 'outline' : 'primary'}
-                    claimButtonBgColor={requested ? colors.inputFieldBg : undefined}
-                    claimButtonTextColor={requested ? colors.textSecondary : undefined}
-                    claimIconColor={requested ? colors.textSecondary : undefined}
-                    onClaim={async () => {
-                      // Always try to create/ensure the request exists.
-                      // The RPC is idempotent (unique index + ON CONFLICT), so this is safe.
-                      const { request, error } = await requestClaimApi(item.id);
-                      if (error || !request) {
-                        Alert.alert('Error', error ?? 'Failed to request this food. Please try again.');
-                        return;
-                      }
-                      addRequestedId(item.id);
-                      navigation.navigate('FoodDetailScreen', { item });
-                    }}
-                  />
+                  <View key={item.id} style={{ marginBottom: 16 }}>
+                    {requested && (
+                      <Text
+                        style={{
+                          marginBottom: 4,
+                          alignSelf: 'flex-start',
+                          paddingHorizontal: 10,
+                          paddingVertical: 4,
+                          borderRadius: 999,
+                          backgroundColor: colors.inputFieldBg,
+                          color: colors.textSecondary,
+                          fontFamily: fontFamilies.interMedium,
+                          fontSize: fonts.caption,
+                        }}
+                      >
+                        Submitted
+                      </Text>
+                    )}
+
+                    <FoodCard
+                      item={item as FoodCardData}
+                      claimLabel={requested ? 'Request Submitted' : 'Request This Food'}
+                      claimButtonVariant={requested ? 'outline' : 'primary'}
+                      claimButtonBgColor={requested ? colors.inputFieldBg : undefined}
+                      claimButtonTextColor={requested ? colors.textSecondary : undefined}
+                      claimIconColor={requested ? colors.textSecondary : undefined}
+                      onClaim={handlePress}
+                      viewDetailLabel={requested ? 'View Detail' : undefined}
+                      onViewDetail={requested ? handlePress : undefined}
+                    />
+                  </View>
                 );
               })
             )}

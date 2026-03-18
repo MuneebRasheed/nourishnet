@@ -10,7 +10,6 @@ import {
   Pressable,
   Dimensions,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, CommonActions } from '@react-navigation/native';
@@ -40,8 +39,6 @@ import LightIcon from '../assets/svgs/LightIcon';
 import DeleteIcon from '../assets/svgs/DeleteIcon';
 import CrownIcon from '../assets/svgs/CrownIcon';
 import KingIcon from '../assets/svgs/KingIcon';
-import { useProviderListingsStore } from '../../store/providerListingsStore';
-
 export default function SettingsScreen() {
   const theme = useThemeStore((s) => s.theme);
   const isDark = useResolvedIsDark();
@@ -55,7 +52,6 @@ export default function SettingsScreen() {
   const largeFont = useSettingsStore((s) => s.largeFont);
   const setLargeFont = useSettingsStore((s) => s.setLargeFont);
   const isProvider = userRole === 'provider';
-  const clearProviderListings = useProviderListingsStore((s) => s.clearAll);
 
   const headerTop = Platform.select({
     ios: insets.top,
@@ -94,24 +90,6 @@ export default function SettingsScreen() {
   const handleDeactivateConfirm = () => {
     setShowDeactivateModal(false);
     // TODO: call API to deactivate account
-  };
-
-  const handleClearLocalCache = () => {
-    Alert.alert(
-      'Clear local cached data',
-      'This removes locally saved listings from this device. It does not delete anything on the server.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear',
-          style: 'destructive',
-          onPress: async () => {
-            await AsyncStorage.removeItem('nourishnet-provider-listings');
-            clearProviderListings();
-          },
-        },
-      ]
-    );
   };
 
   return (
@@ -259,14 +237,6 @@ export default function SettingsScreen() {
               label="Privacy policy"
               onPress={() => navigation.navigate('PrivacyPolicyScreen')}
               isLast={false}
-            />
-            <SettingsRow
-              backgroundColor={colors.inputFieldBg}
-              iconComponent={<DeleteIcon width={20} height={20} />}
-              label="Clear local cached listings (dev)"
-              onPress={handleClearLocalCache}
-              isLast={false}
-              iconBg={isDark ? colors.inputFieldBg : palette.logoutIconBg}
             />
             <SettingsRow
               backgroundColor={colors.inputFieldBg}

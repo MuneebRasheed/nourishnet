@@ -51,7 +51,7 @@ export type RootStackParamList = {
   FoodDetailScreen: { item: FoodDetailItem };
   PostFoodScreen: { editListing?: ProviderListing } | undefined;
   PostPublishScreen: { draft: PostFoodDraft; editListing?: ProviderListing } | undefined;
-  QRCodeScreen: undefined;
+  QRCodeScreen: { listingId: string; mode?: 'scan' | 'show' };
   ListingRequestsScreen: { listingId: string; listingTitle: string };
   SubscriptionManagementScreen: undefined;
   ChangePasswordScreen: undefined;

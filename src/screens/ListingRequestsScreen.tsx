@@ -18,6 +18,7 @@ import ClockICon from '../assets/svgs/ClockICon';
 import LocationPin from '../assets/svgs/LocationPin';
 import { supabase } from '../lib/supabase';
 import { generatePickupPinApi } from '../lib/api/listings';
+import { PickupPinModal } from '../components/PickupPinModal';
 
 export type { ListingRequestItem };
 
@@ -56,6 +57,8 @@ export default function ListingRequestsScreen() {
   const [acceptedRequests, setAcceptedRequests] = useState<ListingRequestItem[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [mutatingRequestId, setMutatingRequestId] = useState<string | null>(null);
+  const [pinModalVisible, setPinModalVisible] = useState(false);
+  const [displayedPin, setDisplayedPin] = useState<string | null>(null);
   const isMutatingRef = useRef(false);
 
   const fetchRequests = useCallback(async () => {
@@ -100,9 +103,14 @@ export default function ListingRequestsScreen() {
 
     const toItem = (r: { id: string; recipient_id: string; created_at: string | null }) => {
       const profile = profilesById.get(r.recipient_id);
+      const displayName =
+        (profile?.full_name && profile.full_name.trim().length > 0
+          ? profile.full_name.trim()
+          : null) ?? 'Recipient';
+
       return {
         id: r.id,
-        requesterName: profile?.full_name?.trim() || r.recipient_id,
+        requesterName: displayName,
         avatar: profile?.avatar_url ? { uri: profile.avatar_url } : undefined,
         distance: '—',
         requestedAt: formatTimeAgo(r.created_at),
@@ -164,7 +172,8 @@ export default function ListingRequestsScreen() {
   );
 
   const handleQRCode = (requestId: string) => {
-    // TODO: navigate to QR code screen
+    if (!listingId) return;
+    navigation.navigate('QRCodeScreen', { listingId, mode: 'show' });
   };
 
   const handlePinCode = async (requestId: string) => {
@@ -175,11 +184,8 @@ export default function ListingRequestsScreen() {
       Alert.alert('Unable to generate PIN', error ?? 'Please try again.');
       return;
     }
-
-    Alert.alert(
-      'Pickup PIN',
-      `Show this PIN to the recipient at pickup:\n\n${pin}\n\nThis PIN may only be shown once—keep it private.`
-    );
+    setDisplayedPin(pin);
+    setPinModalVisible(true);
   };
 
   const pendingCount = pendingRequests.length;
@@ -397,6 +403,14 @@ export default function ListingRequestsScreen() {
       )}
       </View>
 
+      <PickupPinModal
+        visible={pinModalVisible}
+        pin={displayedPin}
+        onClose={() => {
+          setPinModalVisible(false);
+          setDisplayedPin(null);
+        }}
+      />
     </View>
   );
 }

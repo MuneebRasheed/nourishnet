@@ -119,7 +119,6 @@ export function RequestCard({
             <Pressable
               onPress={() => {
               onQRCode?.();
-              navigation.navigate('QRCodeScreen');
             }}
               style={[styles.acceptBtn1, { backgroundColor: colors.primary }]}
             >

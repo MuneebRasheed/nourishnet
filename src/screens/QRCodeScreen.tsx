@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import {
+  Alert,
   StyleSheet,
   Text,
   View,
@@ -8,14 +9,20 @@ import {
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import QRCode from 'react-native-qrcode-svg';
 import CloseIcon from '../assets/svgs/CloseIcon';
 import FlashIcon from '../assets/svgs/FlashIcon';
 import { fontFamilies } from '../../theme/typography';
 import { useAppFontSizes } from '../../theme/fonts';
 import { useThemeStore } from '../../store/themeStore';
 import { getColors, palette } from '../../utils/colors';
+import type { RootStackParamList } from '../navigations/RootNavigation';
+import { useRequestedListingsStore } from '../../store/requestedListingsStore';
+import { generatePickupPinApi, verifyPickupPinApi } from '../lib/api/listings';
+import { PickupVerifiedModal } from '../components/PickupVerifiedModal';
 
 const FRAME_SIZE = 260;
 const CORNER_LENGTH = 40;
@@ -24,7 +31,10 @@ const SCAN_LINE_HEIGHT = 2;
 
 function QRCodeScreen() {
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'QRCodeScreen'>>();
+  const route = useRoute<RouteProp<RootStackParamList, 'QRCodeScreen'>>();
+  const listingIdFromRoute = route.params?.listingId;
+  const mode = route.params?.mode ?? 'scan';
   const [torchOn, setTorchOn] = useState(false);
   const [scanned, setScanned] = useState(false);
   const scanLineAnim = useRef(new Animated.Value(0)).current;
@@ -33,12 +43,38 @@ function QRCodeScreen() {
   const isDark = theme === 'dark';
   const colors = getColors(isDark);
   const fonts = useAppFontSizes();
+  const [pin, setPin] = useState<string | null>(null);
+  const [pinLoading, setPinLoading] = useState(false);
+  const [showPickupVerifiedModal, setShowPickupVerifiedModal] = useState(false);
 
   useEffect(() => {
+    if (mode !== 'scan') return;
     if (!permission?.granted) {
       requestPermission();
     }
-  }, [permission?.granted, requestPermission]);
+  }, [mode, permission?.granted, requestPermission]);
+
+  useEffect(() => {
+    if (mode !== 'show') return;
+    if (!listingIdFromRoute) return;
+    let cancelled = false;
+
+    (async () => {
+      setPinLoading(true);
+      const { pin: newPin, error } = await generatePickupPinApi(listingIdFromRoute);
+      if (cancelled) return;
+      setPinLoading(false);
+      if (error || !newPin) {
+        Alert.alert('Unable to generate PIN', error ?? 'Please try again.');
+        return;
+      }
+      setPin(newPin);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [listingIdFromRoute, mode]);
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -64,12 +100,133 @@ function QRCodeScreen() {
     outputRange: [0, FRAME_SIZE - SCAN_LINE_HEIGHT],
   });
 
-  const handleBarCodeScanned = ({ type, data }: { type: string; data: string }) => {
+  const qrValue = useMemo(() => {
+    if (!listingIdFromRoute || !pin) return '';
+    return JSON.stringify({ listingId: listingIdFromRoute, pin });
+  }, [listingIdFromRoute, pin]);
+
+  function parseQrPayload(raw: string): { listingId?: string; pin?: string } {
+    const trimmed = (raw ?? '').trim();
+    if (!trimmed) return {};
+
+    // Accept raw pin only (e.g. "1234" or "123456")
+    if (/^\d{4,8}$/.test(trimmed)) return { pin: trimmed };
+
+    // Accept URL payloads: nourishnet://pickup?listingId=...&pin=....
+    try {
+      // eslint-disable-next-line no-new
+      const url = new URL(trimmed);
+      const pin = url.searchParams.get('pin') ?? undefined;
+      const listingId = url.searchParams.get('listingId') ?? url.searchParams.get('listing_id') ?? undefined;
+      if (pin || listingId) return { pin: pin?.trim(), listingId: listingId?.trim() };
+    } catch {
+      // ignore
+    }
+
+    // Accept JSON: {"listingId":"...","pin":"1234"} or {"listing_id":"...","pin":"1234"}
+    try {
+      const obj = JSON.parse(trimmed) as any;
+      const pin = typeof obj?.pin === 'string' ? obj.pin : undefined;
+      const listingId =
+        typeof obj?.listingId === 'string'
+          ? obj.listingId
+          : typeof obj?.listing_id === 'string'
+            ? obj.listing_id
+            : undefined;
+      return { pin: pin?.trim(), listingId: listingId?.trim() };
+    } catch {
+      // ignore
+    }
+
+    return {};
+  }
+
+  const handleBarCodeScanned = async ({ data }: { type: string; data: string }) => {
     if (scanned) return;
     setScanned(true);
-    // TODO: handle scanned data (e.g. verify pickup, navigate back with result)
+    const parsed = parseQrPayload(data);
+    const pin = parsed.pin;
+    const listingId = parsed.listingId ?? listingIdFromRoute;
+
+    if (!listingId) {
+      Alert.alert('Missing listing', 'This QR scan is missing a listing id.');
+      setScanned(false);
+      return;
+    }
+    if (!pin) {
+      Alert.alert('Invalid QR code', 'Could not read a pickup PIN from this QR code.');
+      setScanned(false);
+      return;
+    }
+
+    const { error } = await verifyPickupPinApi(listingId, pin);
+    if (error) {
+      Alert.alert('Verification failed', error);
+      setScanned(false);
+      return;
+    }
+
+    useRequestedListingsStore.getState().markRequestCompleted(listingId);
+    setShowPickupVerifiedModal(true);
+  };
+
+  const closePickupVerifiedModal = () => {
+    setShowPickupVerifiedModal(false);
     navigation.goBack();
   };
+
+  if (mode === 'show') {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[styles.overlay, { paddingTop: insets.top }]}>
+          <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
+            <CloseIcon width={24} height={24} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.headerBtn}>
+            <FlashIcon width={24} height={24} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={[styles.showWrap, { paddingBottom: insets.bottom + 24 }]}>
+          <Text style={[styles.showTitle, { color: colors.text, fontFamily: fontFamilies.interSemiBold, fontSize: fonts.body }]}>
+            Show this QR at pickup
+          </Text>
+          <Text style={[styles.showSubtitle, { color: colors.textSecondary, fontFamily: fontFamilies.inter, fontSize: fonts.subhead }]}>
+            Recipient scans to verify pickup
+          </Text>
+
+          <View style={[styles.qrCard, { backgroundColor: palette.white, borderColor: colors.borderColor }]}>
+            {pinLoading ? (
+              <Text style={[styles.loadingText, { color: '#111', fontFamily: fontFamilies.inter, fontSize: fonts.body }]}>
+                Generating QR…
+              </Text>
+            ) : qrValue ? (
+              <QRCode value={qrValue} size={240} />
+            ) : (
+              <Text style={[styles.loadingText, { color: '#111', fontFamily: fontFamilies.inter, fontSize: fonts.body }]}>
+                Unable to generate QR.
+              </Text>
+            )}
+          </View>
+
+          {/* {pin ? (
+            <View style={styles.pinRow}>
+              <Text style={[styles.pinLabel, { color: colors.textSecondary, fontFamily: fontFamilies.inter, fontSize: fonts.caption }]}>
+                Backup PIN
+              </Text>
+              <Text style={[styles.pinValue, { color: colors.text, fontFamily: fontFamilies.interBold, fontSize: fonts.largeTitle }]}>
+                {pin}
+              </Text>
+            </View>
+          ) : null} */}
+
+          <Text style={[styles.showHint, { color: colors.textSecondary, fontFamily: fontFamilies.inter, fontSize: fonts.caption }]}>
+            Keep this code private. Generate it only when the recipient arrives.
+          </Text>
+        </View>
+      </View>
+    );
+  }
 
   if (!permission) {
     return (
@@ -91,54 +248,60 @@ function QRCodeScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <CameraView
-        style={StyleSheet.absoluteFillObject}
-        onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-        barcodeScannerSettings={{
-          barcodeTypes: ['qr'],
-        }}
-        enableTorch={torchOn}
-      />
-      {/* Overlay */}
-      <View style={[styles.overlay, { paddingTop: insets.top }]}>
-        <TouchableOpacity
-          style={styles.headerBtn}
-          onPress={() => navigation.goBack()}
-          activeOpacity={0.8}
-        >
-          <CloseIcon width={24} height={24} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.headerBtn}
-          onPress={() => setTorchOn((v) => !v)}
-          activeOpacity={0.8}
-        >
-          <FlashIcon width={24} height={24} />
-        </TouchableOpacity>
-      </View>
+    <>
+      <View style={styles.container}>
+        <CameraView
+          style={StyleSheet.absoluteFillObject}
+          onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+          barcodeScannerSettings={{
+            barcodeTypes: ['qr'],
+          }}
+          enableTorch={torchOn}
+        />
+        {/* Overlay */}
+        <View style={[styles.overlay, { paddingTop: insets.top }]}>
+          <TouchableOpacity
+            style={styles.headerBtn}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.8}
+          >
+            <CloseIcon width={24} height={24} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.headerBtn}
+            onPress={() => setTorchOn((v) => !v)}
+            activeOpacity={0.8}
+          >
+            <FlashIcon width={24} height={24} />
+          </TouchableOpacity>
+        </View>
 
-      <View style={styles.frameContainer} pointerEvents="none">
-        <View style={[styles.frame, { width: FRAME_SIZE, height: FRAME_SIZE }]}>
-          {/* Corner brackets */}
-          <View style={[styles.corner, styles.cornerTopLeft]} />
-          <View style={[styles.corner, styles.cornerTopRight]} />
-          <View style={[styles.corner, styles.cornerBottomLeft]} />
-          <View style={[styles.corner, styles.cornerBottomRight]} />
-          <Animated.View
-            style={[
-              styles.scanLine,
-              { backgroundColor: colors.primary, transform: [{ translateY: scanLineTranslate }] },
-            ]}
-          />
+        <View style={styles.frameContainer} pointerEvents="none">
+          <View style={[styles.frame, { width: FRAME_SIZE, height: FRAME_SIZE }]}>
+            {/* Corner brackets */}
+            <View style={[styles.corner, styles.cornerTopLeft]} />
+            <View style={[styles.corner, styles.cornerTopRight]} />
+            <View style={[styles.corner, styles.cornerBottomLeft]} />
+            <View style={[styles.corner, styles.cornerBottomRight]} />
+            <Animated.View
+              style={[
+                styles.scanLine,
+                { backgroundColor: colors.primary, transform: [{ translateY: scanLineTranslate }] },
+              ]}
+            />
+          </View>
+        </View>
+
+        <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
+          <Text style={[styles.instruction, { color: palette.white, fontSize: fonts.body }]}>Position QR in the frame</Text>
+          <Text style={[styles.attribution, { color: colors.textSecondary, fontSize: fonts.subhead }]}>Scanning by NourishNet</Text>
         </View>
       </View>
-
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
-        <Text style={[styles.instruction, { color:palette.white, fontSize: fonts.body }]}>Position QR in the frame</Text>
-        <Text style={[styles.attribution, { color: colors.textSecondary, fontSize: fonts.subhead }]}>Scanning by NourishNet</Text>
-      </View>
-    </View>
+      <PickupVerifiedModal
+        visible={showPickupVerifiedModal}
+        onClose={closePickupVerifiedModal}
+      />
+    </>
   );
 }
 
@@ -240,6 +403,44 @@ const styles = StyleSheet.create({
   message: {
     fontFamily: fontFamilies.inter,
    
+    textAlign: 'center',
+  },
+  showWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    gap: 10,
+  },
+  showTitle: {
+    marginTop: 8,
+  },
+  showSubtitle: {
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  qrCard: {
+    padding: 22,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    paddingVertical: 60,
+    paddingHorizontal: 20,
+    textAlign: 'center',
+  },
+  pinRow: {
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  pinLabel: {},
+  pinValue: {
+    letterSpacing: 2,
+  },
+  showHint: {
+    marginTop: 8,
     textAlign: 'center',
   },
   permissionBtn: {

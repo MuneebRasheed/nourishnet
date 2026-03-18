@@ -39,6 +39,9 @@ interface FoodCardProps {
   claimIconColor?: string;
   /** Outline variant only: 'arrow' = FillArrow (e.g. Navigate), 'timer' = TimerIcon (e.g. Request Submitted) */
   claimIconType?: 'arrow' | 'timer';
+  /** When set with outline variant, show a second "View Detail" button below Request Submitted */
+  viewDetailLabel?: string;
+  onViewDetail?: () => void;
 }
 
 export default function FoodCard({
@@ -51,6 +54,8 @@ export default function FoodCard({
   claimButtonTextColor,
   claimIconColor,
   claimIconType = 'timer',
+  viewDetailLabel,
+  onViewDetail,
 }: FoodCardProps) {
   const theme = useThemeStore((s) => s.theme);
   const isDark = theme === 'dark';
@@ -123,45 +128,89 @@ export default function FoodCard({
             ))}
           </View>
         )}
-        <ContinueButton
-          label={claimLabel}
-          onPress={() => onClaim?.()}
-          isDark={isDark}
-          backgroundColor={
-            claimButtonVariant === 'outline'
-              ? (claimButtonBgColor ?? palette.white)
-              : undefined
-          }
-          textColor={
-            claimButtonVariant === 'outline'
-              ? (claimButtonTextColor ?? colors.text)
-              : undefined
-          }
-          borderColor={
-            claimButtonVariant === 'outline'
-              ? (claimButtonBorderColor ?? colors.border)
-              : undefined
-          }
-          icon={
-            claimButtonVariant === 'outline' ? (
-              claimIconType === 'arrow' ? (
-                <FillArrow
-                  width={20}
-                  height={20}
-                  color={isDark ? palette.white : colors.text}
-                />
-              ) : (
-                <TimerIcon
-                  width={20}
-                  height={20}
-                  color={claimIconColor ?? colors.text}
-                />
-              )
-            ) : undefined
-          }
-          iconPosition="left"
-          style={styles.claimBtn}
-        />
+        {claimButtonVariant === 'outline' && onViewDetail != null ? (
+          <View style={styles.twoButtonRow}>
+            <View
+              style={[
+                styles.requestSubmittedPill,
+                {
+                  backgroundColor: claimButtonBgColor ?? colors.inputFieldBg,
+                },
+              ]}
+            >
+              <TimerIcon
+                width={18}
+                height={18}
+                color={claimIconColor ?? colors.textSecondary}
+              />
+              <Text
+                style={[
+                  styles.requestSubmittedPillText,
+                  {
+                    color: claimButtonTextColor ?? colors.textSecondary,
+                    fontFamily: fontFamilies.interMedium,
+                    fontSize: fonts.caption,
+                  },
+                ]}
+                numberOfLines={1}
+              >
+                {claimLabel}
+              </Text>
+            </View>
+            <View style={styles.viewDetailBtnWrap}>
+              <ContinueButton
+                label={viewDetailLabel ?? 'View Detail'}
+                onPress={onViewDetail}
+                isDark={isDark}
+                backgroundColor={colors.primary}
+                textColor={palette.white}
+                icon={<FillArrow width={18} height={18} color={palette.white} />}
+                iconPosition="left"
+                style={styles.viewDetailBtn}
+              />
+            </View>
+          </View>
+        ) : (
+          <ContinueButton
+            label={claimLabel}
+            onPress={() => onClaim?.()}
+            isDark={isDark}
+            backgroundColor={
+              claimButtonVariant === 'outline'
+                ? (claimButtonBgColor ?? palette.white)
+                : undefined
+            }
+            textColor={
+              claimButtonVariant === 'outline'
+                ? (claimButtonTextColor ?? colors.text)
+                : undefined
+            }
+            borderColor={
+              claimButtonVariant === 'outline'
+                ? (claimButtonBorderColor ?? colors.border)
+                : undefined
+            }
+            icon={
+              claimButtonVariant === 'outline' ? (
+                claimIconType === 'arrow' ? (
+                  <FillArrow
+                    width={20}
+                    height={20}
+                    color={isDark ? palette.white : colors.text}
+                  />
+                ) : (
+                  <TimerIcon
+                    width={20}
+                    height={20}
+                    color={claimIconColor ?? colors.text}
+                  />
+                )
+              ) : undefined
+            }
+            iconPosition="left"
+            style={styles.claimBtn}
+          />
+        )}
       </View>
     </View>
   );
@@ -241,5 +290,32 @@ const styles = StyleSheet.create({
   tagText: {},
   claimBtn: {
     marginTop: 14,
+  },
+  twoButtonRow: {
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 10,
+    height: 48,
+  },
+  requestSubmittedPill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 0,
+    borderRadius: 100,
+    gap: 6,
+  },
+  requestSubmittedPillText: {},
+  viewDetailBtnWrap: {
+    flex: 1,
+  },
+  viewDetailBtn: {
+    flex: 1,
+    height: '100%',
+    paddingVertical: 0,
+    paddingHorizontal: 12,
   },
 });

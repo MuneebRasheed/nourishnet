@@ -8,44 +8,17 @@ import {
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useThemeStore } from '../../store/themeStore';
+import { useRequestedListingsStore } from '../../store/requestedListingsStore';
 import { getColors, palette } from '../../utils/colors';
 import { useAppFontSizes } from '../../theme/fonts';
 import { fontFamilies } from '../../theme/typography';
+import { RootStackParamList } from '../navigations/RootNavigation';
 import SettingsHeader from '../components/SettingsHeader';
 import FoodCard, { type FoodCardData } from '../components/FoodCard';
 import CheckMarkHeart from '../assets/svgs/CheckMarkHeart';
-
-type RequestItem = FoodCardData & { status: 'waiting_approval' | 'ready_for_pickup' };
-
-const MOCK_ACTIVE_REQUESTS: RequestItem[] = [
-  {
-    id: '1',
-    image: require('../assets/images/Heart.png'),
-    title: '2 Fresh Sandwich Packs',
-    source: 'Sunshine Bakery',
-    distance: '0.4 km',
-    postedAgo: '10 min ago',
-    portions: '20 portions',
-    timeSlot: '18:00 - 20:00',
-    dietaryTags: ['Gluten', 'Dairy'],
-    status: 'waiting_approval',
-  },
-  {
-    id: '2',
-    image: require('../assets/images/FoodOnboard2.png'),
-    title: '20 Fresh Sandwich Packs',
-    source: 'Sunshine Bakery',
-    distance: '0.4 km',
-    postedAgo: '10 min ago',
-    portions: '20 portions',
-    timeSlot: '18:00 - 20:00',
-    dietaryTags: ['Gluten', 'Dairy'],
-    status: 'ready_for_pickup',
-  },
-];
-
-const MOCK_COMPLETED_REQUESTS: RequestItem[] = [];
 
 export default function MyRequestsScreen() {
   const theme = useThemeStore((s) => s.theme);
@@ -53,7 +26,10 @@ export default function MyRequestsScreen() {
   const colors = getColors(isDark);
   const fonts = useAppFontSizes();
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [activeTab, setActiveTab] = useState<'Active' | 'Completed'>('Active');
+  const requestedItems = useRequestedListingsStore((s) => s.requestedItems);
+  const completedIds = useRequestedListingsStore((s) => s.completedIds);
 
   const headerTop = Platform.select({
     ios: insets.top,
@@ -61,7 +37,9 @@ export default function MyRequestsScreen() {
     default: insets.top,
   });
 
-  const requests = activeTab === 'Active' ? MOCK_ACTIVE_REQUESTS : MOCK_COMPLETED_REQUESTS;
+  const activeRequests = requestedItems.filter((i) => !completedIds.has(i.id));
+  const completedRequests = requestedItems.filter((i) => completedIds.has(i.id));
+  const requests = activeTab === 'Active' ? activeRequests : completedRequests;
 
   return (
     <View style={[styles.container, {  backgroundColor: colors.background }]}>
@@ -145,46 +123,22 @@ export default function MyRequestsScreen() {
             </View>
           </View>
         ) : (
-          requests.map((item) => {
-            const cardItem: FoodCardData = {
-              id: item.id,
-              image: item.image,
-              title: item.title,
-              source: item.source,
-              distance: item.distance,
-              postedAgo: item.postedAgo,
-              portions: item.portions,
-              timeSlot: item.timeSlot,
-              dietaryTags: item.dietaryTags,
-              isLive: false,
-            };
-            const isReady = item.status === 'ready_for_pickup';
-            const claimLabel = isReady ? 'Navigate' : 'Request Submitted';
-            const claimBtnBg = isReady ? colors.inputFieldBg : colors.requestBtnBg;
-            const claimBtnBorder = isReady ? colors.borderColor : "transparent";
-            const claimBtnText = isReady ? colors.text : palette.timerIconColor;
-            const claimIcon = isReady ? palette.white : palette.timerIconColor;
-            return (
+          requests.map((item) => (
+            <View key={item.id} style={styles.cardWrap}>
               <FoodCard
-                key={item.id}
-                item={cardItem}
-                claimLabel={claimLabel}
+                item={{ ...item, isLive: false } as FoodCardData}
+                claimLabel={activeTab === 'Completed' ? 'Completed' : 'Request Submitted'}
                 claimButtonVariant="outline"
-                claimButtonBgColor={claimBtnBg}
-                claimButtonBorderColor={claimBtnBorder}
-                claimButtonTextColor={claimBtnText}
-                claimIconColor={claimIcon}
-                claimIconType={isReady ? 'arrow' : 'timer'}
-                onClaim={() => {
-                  if (item.status === 'ready_for_pickup') {
-                    // TODO: navigate to pickup
-                  } else {
-                    // TODO: view status
-                  }
-                }}
+                claimButtonBgColor={colors.inputFieldBg}
+                claimButtonTextColor={colors.textSecondary}
+                claimIconColor={colors.textSecondary}
+                viewDetailLabel="View Detail"
+                onViewDetail={() =>
+                  navigation.navigate('FoodDetailScreen', { item: { ...item } })
+                }
               />
-            );
-          })
+            </View>
+          ))
         )}
       </ScrollView>
     </View>
@@ -225,6 +179,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
   },
+  cardWrap: {},
   scrollContentEmpty: {
     flexGrow: 1,
     justifyContent: 'center',

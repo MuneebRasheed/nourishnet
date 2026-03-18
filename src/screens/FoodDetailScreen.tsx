@@ -10,7 +10,7 @@ import {
   ImageSourcePropType,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useThemeStore } from '../../store/themeStore';
 import { useRequestedListingsStore } from '../../store/requestedListingsStore';
@@ -22,6 +22,7 @@ import PickupDetailsCard from '../components/PickupDetailsCard';
 import NavigateShareBar from '../components/NavigateShareBar';
 import ContinueButton from '../components/ContinueButton';
 import { VerifyPickupModal } from '../components/VerifyPickupModal';
+import { PickupVerifiedModal } from '../components/PickupVerifiedModal';
 import TimerIcon from '../assets/svgs/TimerIcon';
 import LockIcon from '../assets/svgs/LockIcon';
 import BarcodeIcon from '../assets/svgs/BarcodeIcon';
@@ -54,16 +55,24 @@ function FoodDetailScreen() {
   const [requestSubmitted, setRequestSubmitted] = useState(false);
   const [showPinQrButtons, setShowPinQrButtons] = useState(false);
   const [showVerifyPickupModal, setShowVerifyPickupModal] = useState(false);
+  const [showPickupVerifiedModal, setShowPickupVerifiedModal] = useState(false);
 
   useEffect(() => {
     if (!item?.id) return;
-    // Keep local UI in sync with store for "already requested" items.
     setRequestSubmitted(useRequestedListingsStore.getState().isRequested(item.id));
   }, [item?.id]);
 
+  // Refresh "already requested" state when screen comes back into focus (e.g. after navigating back).
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!item?.id) return;
+      setRequestSubmitted(useRequestedListingsStore.getState().isRequested(item.id));
+    }, [item?.id])
+  );
+
   useEffect(() => {
     if (!requestSubmitted) return;
-    const t = setTimeout(() => setShowPinQrButtons(true), 2000);
+    const t = setTimeout(() => setShowPinQrButtons(true), 3000);
     return () => clearTimeout(t);
   }, [requestSubmitted]);
 
@@ -77,7 +86,9 @@ function FoodDetailScreen() {
       Alert.alert('Invalid PIN', error);
       return;
     }
-    Alert.alert('Pickup verified', 'Thanks! Your pickup has been confirmed.');
+    useRequestedListingsStore.getState().markRequestCompleted(item.id);
+    closeVerifyPickupModal();
+    setShowPickupVerifiedModal(true);
   };
 
   if (!item) {
@@ -307,7 +318,7 @@ function FoodDetailScreen() {
                 />
                 <ContinueButton
                   label="QR Code"
-                  onPress={() => navigation.navigate('QRCodeScreen')}
+                  onPress={() => navigation.navigate('QRCodeScreen', { listingId: item.id, mode: 'scan' })}
                   isDark={isDark}
                   backgroundColor={colors.inputFieldBg}
                   textColor={colors.text}
@@ -330,10 +341,16 @@ function FoodDetailScreen() {
               onPress={async () => {
                 const { request, error } = await requestClaimApi(item.id);
                 if (error || !request) {
+                  // Already requested or listing not requestable: refresh UI, no error modal.
+                  if (error === 'listing_not_requestable') {
+                    useRequestedListingsStore.getState().addRequestedItem(item);
+                    setRequestSubmitted(true);
+                    return;
+                  }
                   Alert.alert('Error', error ?? 'Failed to request this food. Please try again.');
                   return;
                 }
-                useRequestedListingsStore.getState().addRequestedId(item.id);
+                useRequestedListingsStore.getState().addRequestedItem(item);
                 setRequestSubmitted(true);
               }}
               isDark={isDark}
@@ -353,6 +370,10 @@ function FoodDetailScreen() {
         visible={showVerifyPickupModal}
         onClose={closeVerifyPickupModal}
         onVerify={handleVerifyPickup}
+      />
+      <PickupVerifiedModal
+        visible={showPickupVerifiedModal}
+        onClose={() => setShowPickupVerifiedModal(false)}
       />
     </View>
   );
