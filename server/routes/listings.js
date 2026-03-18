@@ -4,14 +4,23 @@ const { createClient } = require('@supabase/supabase-js');
 const router = Router();
 const supabaseUrl = process.env.SUPABASE_URL ?? '';
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY ?? '';
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
 
 const send = (res, body, status) => res.status(status).json(body);
 
 function getSupabaseWithAuth(authHeader) {
   if (!authHeader?.startsWith('Bearer ')) return null;
+  const token = authHeader.slice('Bearer '.length).trim();
+  if (!token) return null;
+  if (!supabaseUrl || !supabaseAnonKey) return null;
   return createClient(supabaseUrl, supabaseAnonKey, {
     global: { headers: { Authorization: authHeader } },
   });
+}
+
+function getSupabaseService() {
+  if (!supabaseUrl || !supabaseServiceRoleKey) return null;
+  return createClient(supabaseUrl, supabaseServiceRoleKey);
 }
 
 // ---------- Create listing (POST /listings) ----------
@@ -20,11 +29,12 @@ router.post('/', async (req, res) => {
     const authHeader = req.headers.authorization;
     const supabase = getSupabaseWithAuth(authHeader);
     if (!supabase) {
-      return send(res, { error: 'Missing or invalid Authorization header' }, 401);
+      return send(res, { error: 'Server auth is not configured or missing Authorization header' }, 401);
     }
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user?.id) {
-      return send(res, { error: 'Invalid token or user not found' }, 401);
+      console.warn('[listings POST] auth.getUser failed', userError);
+      return send(res, { error: userError?.message ?? 'Invalid token or user not found' }, 401);
     }
 
     const body = req.body || {};
@@ -46,6 +56,8 @@ router.post('/', async (req, res) => {
       end_time: typeof body.endTime === 'string' ? body.endTime : '',
       note: typeof body.note === 'string' ? body.note.trim() : '',
       status: 'active',
+      claim_mode: 'window',
+      claim_window_seconds: 180,
     };
 
     const { data, error } = await supabase.from('listings').insert(row).select().single();
@@ -60,17 +72,152 @@ router.post('/', async (req, res) => {
   }
 });
 
+// ---------- Recipient requests a claim (POST /listings/:id/request) ----------
+router.post('/:id/request', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const supabase = getSupabaseWithAuth(authHeader);
+    if (!supabase) {
+      return send(res, { error: 'Server auth is not configured or missing Authorization header' }, 401);
+    }
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user?.id) {
+      console.warn('[listings POST /:id/request] auth.getUser failed', userError);
+      return send(res, { error: userError?.message ?? 'Invalid token or user not found' }, 401);
+    }
+
+    const listingId = req.params.id;
+    if (!listingId) {
+      return send(res, { error: 'Listing id is required' }, 400);
+    }
+
+    const { data, error } = await supabase.rpc('request_claim', { p_listing_id: listingId });
+    if (error) {
+      console.error('[listings POST /:id/request]', error);
+      return send(res, { error: error.message ?? 'Failed to request claim' }, 400);
+    }
+    return send(res, { request: data }, 200);
+  } catch (e) {
+    console.error('[listings POST /:id/request]', e);
+    return send(res, { error: 'Something went wrong' }, 500);
+  }
+});
+
+// ---------- Provider generates/sets pickup PIN (POST /listings/:id/pickup-pin) ----------
+router.post('/:id/pickup-pin', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const supabase = getSupabaseWithAuth(authHeader);
+    if (!supabase) {
+      return send(res, { error: 'Server auth is not configured or missing Authorization header' }, 401);
+    }
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user?.id) {
+      console.warn('[listings POST /:id/pickup-pin] auth.getUser failed', userError);
+      return send(res, { error: userError?.message ?? 'Invalid token or user not found' }, 401);
+    }
+
+    const listingId = req.params.id;
+    if (!listingId) {
+      return send(res, { error: 'Listing id is required' }, 400);
+    }
+
+    const { data, error } = await supabase.rpc('provider_generate_pickup_pin', { p_listing_id: listingId });
+    if (error) {
+      console.error('[listings POST /:id/pickup-pin]', error);
+      return send(res, { error: error.message ?? 'Failed to generate pickup PIN' }, 400);
+    }
+    return send(res, { pin: data }, 200);
+  } catch (e) {
+    console.error('[listings POST /:id/pickup-pin]', e);
+    return send(res, { error: 'Something went wrong' }, 500);
+  }
+});
+
+// ---------- Recipient verifies pickup PIN (POST /listings/:id/verify-pin) ----------
+router.post('/:id/verify-pin', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const supabase = getSupabaseWithAuth(authHeader);
+    if (!supabase) {
+      return send(res, { error: 'Server auth is not configured or missing Authorization header' }, 401);
+    }
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user?.id) {
+      console.warn('[listings POST /:id/verify-pin] auth.getUser failed', userError);
+      return send(res, { error: userError?.message ?? 'Invalid token or user not found' }, 401);
+    }
+
+    const listingId = req.params.id;
+    if (!listingId) {
+      return send(res, { error: 'Listing id is required' }, 400);
+    }
+
+    const body = req.body || {};
+    const pin = typeof body.pin === 'string' ? body.pin.trim() : '';
+    const note = typeof body.note === 'string' ? body.note : null;
+    if (!pin) {
+      return send(res, { error: 'PIN is required' }, 400);
+    }
+
+    const { data, error } = await supabase.rpc('recipient_verify_pickup_pin', {
+      p_listing_id: listingId,
+      p_pin: pin,
+      p_note: note,
+    });
+    if (error) {
+      console.error('[listings POST /:id/verify-pin]', error);
+      return send(res, { error: error.message ?? 'Failed to verify PIN' }, 400);
+    }
+    return send(res, { result: data }, 200);
+  } catch (e) {
+    console.error('[listings POST /:id/verify-pin]', e);
+    return send(res, { error: 'Something went wrong' }, 500);
+  }
+});
+
+// ---------- (Optional) Finalize claim window (POST /listings/:id/finalize) ----------
+// This is intentionally locked to service role; use a scheduled job / edge function in production.
+router.post('/:id/finalize', async (req, res) => {
+  try {
+    const adminToken = req.headers['x-admin-token'];
+    if (!adminToken || adminToken !== process.env.ADMIN_TOKEN) {
+      return send(res, { error: 'Unauthorized' }, 401);
+    }
+    const supabase = getSupabaseService();
+    if (!supabase) {
+      return send(res, { error: 'Server misconfigured' }, 500);
+    }
+
+    const listingId = req.params.id;
+    if (!listingId) {
+      return send(res, { error: 'Listing id is required' }, 400);
+    }
+
+    const { data, error } = await supabase.rpc('finalize_claim_window', { p_listing_id: listingId });
+    if (error) {
+      console.error('[listings POST /:id/finalize]', error);
+      return send(res, { error: error.message ?? 'Failed to finalize claim' }, 400);
+    }
+    return send(res, { listing: data }, 200);
+  } catch (e) {
+    console.error('[listings POST /:id/finalize]', e);
+    return send(res, { error: 'Something went wrong' }, 500);
+  }
+});
+
 // ---------- List my listings (GET /listings) ----------
 router.get('/', async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
     const supabase = getSupabaseWithAuth(authHeader);
     if (!supabase) {
-      return send(res, { error: 'Missing or invalid Authorization header' }, 401);
+      return send(res, { error: 'Server auth is not configured or missing Authorization header' }, 401);
     }
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user?.id) {
-      return send(res, { error: 'Invalid token or user not found' }, 401);
+      console.warn('[listings GET] auth.getUser failed', userError);
+      return send(res, { error: userError?.message ?? 'Invalid token or user not found' }, 401);
     }
 
     const statusFilter = req.query.status; // optional: active | completed
@@ -101,17 +248,24 @@ router.get('/browse', async (req, res) => {
     const authHeader = req.headers.authorization;
     const supabase = getSupabaseWithAuth(authHeader);
     if (!supabase) {
-      return send(res, { error: 'Missing or invalid Authorization header' }, 401);
+      return send(res, { error: 'Server auth is not configured or missing Authorization header' }, 401);
     }
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user?.id) {
-      return send(res, { error: 'Invalid token or user not found' }, 401);
+      console.warn('[listings GET /browse] auth.getUser failed', userError);
+      return send(res, { error: userError?.message ?? 'Invalid token or user not found' }, 401);
     }
 
-    const { data, error } = await supabase
+    // Prefer service role for browse feed so RLS cannot accidentally hide active listings.
+    // If service role isn't configured (common in local dev), gracefully fall back to the
+    // authenticated client so the app still works.
+    const supabaseService = getSupabaseService();
+    const client = supabaseService ?? supabase;
+
+    const { data, error } = await client
       .from('listings')
       .select('*')
-      .eq('status', 'active')
+      .in('status', ['active', 'request_open'])
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -131,11 +285,12 @@ router.delete('/:id', async (req, res) => {
     const authHeader = req.headers.authorization;
     const supabase = getSupabaseWithAuth(authHeader);
     if (!supabase) {
-      return send(res, { error: 'Missing or invalid Authorization header' }, 401);
+      return send(res, { error: 'Server auth is not configured or missing Authorization header' }, 401);
     }
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user?.id) {
-      return send(res, { error: 'Invalid token or user not found' }, 401);
+      console.warn('[listings DELETE] auth.getUser failed', userError);
+      return send(res, { error: userError?.message ?? 'Invalid token or user not found' }, 401);
     }
 
     const id = req.params.id;
@@ -165,11 +320,12 @@ router.patch('/:id', async (req, res) => {
     const authHeader = req.headers.authorization;
     const supabase = getSupabaseWithAuth(authHeader);
     if (!supabase) {
-      return send(res, { error: 'Missing or invalid Authorization header' }, 401);
+      return send(res, { error: 'Server auth is not configured or missing Authorization header' }, 401);
     }
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user?.id) {
-      return send(res, { error: 'Invalid token or user not found' }, 401);
+      console.warn('[listings PATCH] auth.getUser failed', userError);
+      return send(res, { error: userError?.message ?? 'Invalid token or user not found' }, 401);
     }
 
     const id = req.params.id;

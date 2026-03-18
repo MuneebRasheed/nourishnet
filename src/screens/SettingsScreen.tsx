@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  Alert,
   StyleSheet,
   Text,
   View,
@@ -9,6 +10,7 @@ import {
   Pressable,
   Dimensions,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, CommonActions } from '@react-navigation/native';
@@ -38,6 +40,7 @@ import LightIcon from '../assets/svgs/LightIcon';
 import DeleteIcon from '../assets/svgs/DeleteIcon';
 import CrownIcon from '../assets/svgs/CrownIcon';
 import KingIcon from '../assets/svgs/KingIcon';
+import { useProviderListingsStore } from '../../store/providerListingsStore';
 
 export default function SettingsScreen() {
   const theme = useThemeStore((s) => s.theme);
@@ -52,6 +55,7 @@ export default function SettingsScreen() {
   const largeFont = useSettingsStore((s) => s.largeFont);
   const setLargeFont = useSettingsStore((s) => s.setLargeFont);
   const isProvider = userRole === 'provider';
+  const clearProviderListings = useProviderListingsStore((s) => s.clearAll);
 
   const headerTop = Platform.select({
     ios: insets.top,
@@ -92,6 +96,24 @@ export default function SettingsScreen() {
     // TODO: call API to deactivate account
   };
 
+  const handleClearLocalCache = () => {
+    Alert.alert(
+      'Clear local cached data',
+      'This removes locally saved listings from this device. It does not delete anything on the server.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: async () => {
+            await AsyncStorage.removeItem('nourishnet-provider-listings');
+            clearProviderListings();
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background, flex: 1 }]}>
       <View style={[styles.header, { marginTop: headerTop }]}>
@@ -127,7 +149,8 @@ export default function SettingsScreen() {
           >
             Account
           </Text>
-          <View style={[styles.sectionCard, { backgroundColor: colors.inputFieldBg }, !isDark && { borderWidth: 1, borderColor: colors.borderColor }]}>
+          <View style={[styles.sectionCard, { backgroundColor: "transparent"
+           }, !isDark && { borderWidth: 1, borderColor: colors.borderColor }]}>
             <SettingsRow
               backgroundColor={colors.inputFieldBg}
               iconComponent={<PartnerIcon width={20} height={20} stroke={colors.text} />}
@@ -161,7 +184,7 @@ export default function SettingsScreen() {
           >
             Appearance
           </Text>
-          <View style={[styles.sectionCard, { backgroundColor: colors.inputFieldBg }, !isDark && { borderWidth: 1, borderColor: colors.borderColor }]}>
+          <View style={[styles.sectionCard, { backgroundColor: "transparent" }, !isDark && { borderWidth: 1, borderColor: colors.borderColor }]}>
             <SettingsRow
             backgroundColor={colors.inputFieldBg}
               iconComponent={<Ticon width={20} height={20} color={colors.text} />}
@@ -201,7 +224,7 @@ export default function SettingsScreen() {
             >
               Subscription
             </Text>
-            <View style={[styles.sectionCard, { backgroundColor: colors.inputFieldBg }, !isDark && { borderWidth: 1, borderColor: colors.borderColor }]}>
+            <View style={[styles.sectionCard, { backgroundColor: "transparent" }, !isDark && { borderWidth: 1, borderColor: colors.borderColor }]}>
               <SettingsRow
                 backgroundColor={colors.inputFieldBg}
                 iconComponent={<KingIcon width={20} height={20} color={colors.text} />}
@@ -222,7 +245,7 @@ export default function SettingsScreen() {
           >
             Other Setting
           </Text>
-          <View style={[styles.sectionCard, { backgroundColor: colors.inputFieldBg }, !isDark && { borderWidth: 1, borderColor: colors.borderColor }]}>
+          <View style={[styles.sectionCard, { backgroundColor: "transparent" }, !isDark && { borderWidth: 1, borderColor: colors.borderColor }]}>
             <SettingsRow
               backgroundColor={colors.inputFieldBg}
               icon="document-text-outline"
@@ -236,6 +259,14 @@ export default function SettingsScreen() {
               label="Privacy policy"
               onPress={() => navigation.navigate('PrivacyPolicyScreen')}
               isLast={false}
+            />
+            <SettingsRow
+              backgroundColor={colors.inputFieldBg}
+              iconComponent={<DeleteIcon width={20} height={20} />}
+              label="Clear local cached listings (dev)"
+              onPress={handleClearLocalCache}
+              isLast={false}
+              iconBg={isDark ? colors.inputFieldBg : palette.logoutIconBg}
             />
             <SettingsRow
               backgroundColor={colors.inputFieldBg}

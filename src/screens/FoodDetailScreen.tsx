@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
+  Alert,
   StyleSheet,
   Text,
   View,
@@ -26,6 +27,7 @@ import LockIcon from '../assets/svgs/LockIcon';
 import BarcodeIcon from '../assets/svgs/BarcodeIcon';
 import { FoodCardData } from '../components/FoodCard';
 import { Ionicons } from '@expo/vector-icons';
+import { requestClaimApi, verifyPickupPinApi } from '../lib/api/listings';
 
 export type FoodDetailItem = FoodCardData & {
   pickupAddress?: string;
@@ -41,9 +43,6 @@ export type FoodDetailItem = FoodCardData & {
 };
 
 function FoodDetailScreen() {
-  const [requestSubmitted, setRequestSubmitted] = useState(false);
-  const [showPinQrButtons, setShowPinQrButtons] = useState(false);
-  const [showVerifyPickupModal, setShowVerifyPickupModal] = useState(false);
   const theme = useThemeStore((s) => s.theme);
   const isDark = theme === 'dark';
   const colors = getColors(isDark);
@@ -52,6 +51,15 @@ function FoodDetailScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'FoodDetailScreen'>>();
   const route = useRoute<RouteProp<RootStackParamList, 'FoodDetailScreen'>>();
   const item = route.params?.item;
+  const [requestSubmitted, setRequestSubmitted] = useState(false);
+  const [showPinQrButtons, setShowPinQrButtons] = useState(false);
+  const [showVerifyPickupModal, setShowVerifyPickupModal] = useState(false);
+
+  useEffect(() => {
+    if (!item?.id) return;
+    // Keep local UI in sync with store for "already requested" items.
+    setRequestSubmitted(useRequestedListingsStore.getState().isRequested(item.id));
+  }, [item?.id]);
 
   useEffect(() => {
     if (!requestSubmitted) return;
@@ -62,8 +70,14 @@ function FoodDetailScreen() {
   const openVerifyPickupModal = () => setShowVerifyPickupModal(true);
   const closeVerifyPickupModal = () => setShowVerifyPickupModal(false);
 
-  const handleVerifyPickup = (pin: string) => {
-    // TODO: verify PIN with provider / API
+  const handleVerifyPickup = async (pin: string) => {
+    if (!item?.id) return;
+    const { error } = await verifyPickupPinApi(item.id, pin);
+    if (error) {
+      Alert.alert('Invalid PIN', error);
+      return;
+    }
+    Alert.alert('Pickup verified', 'Thanks! Your pickup has been confirmed.');
   };
 
   if (!item) {
@@ -313,7 +327,12 @@ function FoodDetailScreen() {
           ) : (
             <ContinueButton
               label="Request This Food"
-              onPress={() => {
+              onPress={async () => {
+                const { request, error } = await requestClaimApi(item.id);
+                if (error || !request) {
+                  Alert.alert('Error', error ?? 'Failed to request this food. Please try again.');
+                  return;
+                }
                 useRequestedListingsStore.getState().addRequestedId(item.id);
                 setRequestSubmitted(true);
               }}

@@ -31,7 +31,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'VerificationCodeScreen'
 const CODE_LENGTH = 6;
 
 export default function VerificationCodeScreen({ route }: Props) {
-  const { email = '', role, context = 'signup' } = route.params ?? {};
+  const { email = '', role, context = 'signup', password } = route.params ?? {};
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList, 'VerificationCodeScreen'>>();
   const insets = useSafeAreaInsets();
@@ -105,7 +105,17 @@ export default function VerificationCodeScreen({ route }: Props) {
         setError(body?.error ?? 'Invalid or expired code. Please request a new one.');
         return;
       }
-      await supabase.auth.refreshSession();
+      // After custom OTP verification, Supabase may not have an active session yet.
+      // Ensure we are actually signed in so API calls include an Authorization token.
+      if (password && email) {
+        const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+        if (signInError) {
+          setError(signInError.message ?? 'Sign in failed. Please try again.');
+          return;
+        }
+      } else {
+        await supabase.auth.refreshSession();
+      }
       if (role === 'provider') {
         navigation.replace('ProviderProfileScreen', { email, otp });
       } else {

@@ -9,6 +9,7 @@ import { useThemeStore } from '../../store/themeStore'
 export type RoleCardProps = {
   title: string
   description: string
+  icon?: React.ReactNode
   iconColor?: string
   iconBackgroundColor?: string
   iconWrapperBackgroundColor?: string
@@ -18,6 +19,7 @@ export type RoleCardProps = {
 const RoleCard = ({
   title,
   description,
+  icon,
   iconColor,
   iconBackgroundColor,
   iconWrapperBackgroundColor,
@@ -39,7 +41,7 @@ const RoleCard = ({
       activeOpacity={0.85}
     >
       <View style={[styles.iconWrapper, { backgroundColor: iconWrapperBg }]}>
-        <RoleBulb color={iconColor} width={40} height={40} />
+        {icon ?? <RoleBulb color={iconColor} width={40} height={40} />}
       </View>
       <View style={{marginHorizontal:40}}>
 

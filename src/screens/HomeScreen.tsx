@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, RefreshControl } from 'react-native';
+import { Alert, StyleSheet, Text, View, ScrollView, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -10,7 +10,7 @@ import { useAppFontSizes } from '../../theme/fonts';
 import { fontFamilies } from '../../theme/typography';
 import { RootStackParamList } from '../navigations/RootNavigation';
 import type { ProviderListing } from '../../store/providerListingsStore';
-import { fetchBrowseListingsApi } from '../lib/api/listings';
+import { fetchBrowseListingsApi, requestClaimApi } from '../lib/api/listings';
 import HomeHeader from '../components/HomeHeader';
 import SearchBarWithFilter from '../components/SearchBarWithFilter';
 import FilterModal, {
@@ -91,50 +91,6 @@ function providerListingToDetailItem(listing: ProviderListing): FoodDetailItem {
   };
 }
 
-const MOCK_FOOD_LIST: FoodDetailItem[] = [
-  {
-    id: '1',
-    image: require('../assets/images/Heart.png'),
-    title: '20 Fresh Sandwich Packs',
-    source: 'Sunshine Bakery',
-    distance: '0.4 km away',
-    postedAgo: '10 min ago',
-    portions: '20 portions',
-    timeSlot: '18:00 - 20:00',
-    dietaryTags: ['Gluten', 'Dairy'],
-    isLive: true,
-    pickupAddress: '123 Main Street, Downtown',
-    pickupTimeNote: 'Available today',
-    pickupInstructions: 'Back door, ask for manager Sarah',
-    quantity: 20,
-    providerImage: require('../assets/images/Avatar.png'),
-  },
-  {
-    id: '2',
-    image: require('../assets/images/FoodOnboard2.png'),
-    title: '20 Fresh Sandwich Packs',
-    source: 'Sunshine Bakery',
-    distance: '0.4 km',
-    postedAgo: '10 min ago',
-    portions: '20 portions',
-    timeSlot: '18:00 - 20:00',
-    dietaryTags: ['Gluten', 'Dairy'],
-    isLive: true,
-  },
-  {
-    id: '3',
-    image: require('../assets/images/ReceiptOnboard1.png'),
-    title: 'Mixed Platters & Sides',
-    source: 'Green Kitchen',
-    distance: '1.2 km',
-    postedAgo: '25 min ago',
-    portions: '8 portions',
-    timeSlot: '12:00 - 14:00',
-    dietaryTags: ['Vegan'],
-    isLive: true,
-  },
-];
-
 export default function HomeScreen() {
   const theme = useThemeStore((s) => s.theme);
   const isDark = theme === 'dark';
@@ -170,15 +126,30 @@ export default function HomeScreen() {
     setRefreshing(false);
   };
 
+  const ACTIVE_LISTING_STATUSES = useMemo(
+    () => new Set<ProviderListing['status']>(['active', 'request_open', 'claimed']),
+    []
+  );
+
   const activeListings = useMemo(
-    () => browseListings.filter((l) => l.status === 'active'),
-    [browseListings]
+    () => browseListings.filter((l) => ACTIVE_LISTING_STATUSES.has(l.status)),
+    [ACTIVE_LISTING_STATUSES, browseListings]
   );
+  const mergedActiveListings = useMemo(() => {
+    // Recipient home should reflect the backend browse feed (same as provider-created listings).
+    // Do not fall back to locally persisted provider listings, to avoid showing stale/mock data.
+    const seen = new Set<string>();
+    return activeListings.filter((l) => {
+      if (seen.has(l.id)) return false;
+      seen.add(l.id);
+      return true;
+    });
+  }, [activeListings]);
   const listingItems = useMemo(
-    () => activeListings.map(providerListingToDetailItem),
-    [activeListings]
+    () => mergedActiveListings.map(providerListingToDetailItem),
+    [mergedActiveListings]
   );
-  const baseList = listingItems.length > 0 ? listingItems : MOCK_FOOD_LIST;
+  const baseList = listingItems;
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('All');
   const [appliedFilters, setAppliedFilters] = useState<FilterState | null>(null);
@@ -332,14 +303,17 @@ export default function HomeScreen() {
                     claimButtonBgColor={requested ? colors.inputFieldBg : undefined}
                     claimButtonTextColor={requested ? colors.textSecondary : undefined}
                     claimIconColor={requested ? colors.textSecondary : undefined}
-                    onClaim={
-                      requested
-                        ? undefined
-                        : () => {
-                            addRequestedId(item.id);
-                            navigation.navigate('FoodDetailScreen', { item });
-                          }
-                    }
+                    onClaim={async () => {
+                      // Always try to create/ensure the request exists.
+                      // The RPC is idempotent (unique index + ON CONFLICT), so this is safe.
+                      const { request, error } = await requestClaimApi(item.id);
+                      if (error || !request) {
+                        Alert.alert('Error', error ?? 'Failed to request this food. Please try again.');
+                        return;
+                      }
+                      addRequestedId(item.id);
+                      navigation.navigate('FoodDetailScreen', { item });
+                    }}
                   />
                 );
               })

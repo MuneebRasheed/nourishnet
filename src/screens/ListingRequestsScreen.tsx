@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { StyleSheet, Text, View, ScrollView } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, StyleSheet, Text, View, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -12,23 +12,29 @@ import { useProviderListingsStore } from '../../store/providerListingsStore';
 import SettingsHeader from '../components/SettingsHeader';
 import { ActiveCompletedTabs } from '../components/ActiveCompletedTabs';
 import { RequestCard, type ListingRequestItem } from '../components/RequestCard';
-import { VerifyPickupModal } from '../components/VerifyPickupModal';
 import { Ionicons } from '@expo/vector-icons';
 import BoxIcon from '../assets/svgs/BoxIcon';
 import ClockICon from '../assets/svgs/ClockICon';
 import LocationPin from '../assets/svgs/LocationPin';
+import { supabase } from '../lib/supabase';
+import { generatePickupPinApi } from '../lib/api/listings';
 
 export type { ListingRequestItem };
 
 type RequestTab = 'Request' | 'Available';
 
-// Mock data for pending requests
-const MOCK_REQUESTS: ListingRequestItem[] = [
-  { id: '1', requesterName: 'Sarah Johnson', distance: '0.5 km', requestedAt: '16m ago', priority: 'high' },
-  { id: '2', requesterName: 'Sarah Johnson', distance: '0.5 km', requestedAt: '16m ago', priority: 'medium' },
-  { id: '3', requesterName: 'Sarah Johnson', distance: '0.5 km', requestedAt: '16m ago', priority: 'high' },
-  { id: '4', requesterName: 'Sarah Johnson', distance: '0.5 km', requestedAt: '16m ago', priority: 'high' },
-];
+function formatTimeAgo(iso: string | null | undefined) {
+  if (!iso) return 'just now';
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return 'just now';
+  const mins = Math.floor(ms / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
 
 export default function ListingRequestsScreen() {
   const theme = useThemeStore((s) => s.theme);
@@ -46,39 +52,134 @@ export default function ListingRequestsScreen() {
   );
 
   const [activeTab, setActiveTab] = useState<RequestTab>('Request');
-  const [pendingRequests, setPendingRequests] = useState<ListingRequestItem[]>(MOCK_REQUESTS);
+  const [pendingRequests, setPendingRequests] = useState<ListingRequestItem[]>([]);
   const [acceptedRequests, setAcceptedRequests] = useState<ListingRequestItem[]>([]);
-  const [verifyModalRequestId, setVerifyModalRequestId] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [mutatingRequestId, setMutatingRequestId] = useState<string | null>(null);
+  const isMutatingRef = useRef(false);
+
+  const fetchRequests = useCallback(async () => {
+    if (!listingId) return;
+    setIsRefreshing(true);
+
+    // 1) Fetch requests
+    const { data: requests, error: reqErr } = await supabase
+      .from('listing_requests')
+      .select('id, recipient_id, status, created_at')
+      .eq('listing_id', listingId)
+      .in('status', ['pending', 'won'])
+      .order('created_at', { ascending: false });
+
+    if (reqErr) {
+      console.error('[ListingRequestsScreen] fetch listing_requests', reqErr);
+      setPendingRequests([]);
+      setAcceptedRequests([]);
+      setIsRefreshing(false);
+      return;
+    }
+
+    const rows = requests ?? [];
+    const recipientIds = Array.from(new Set(rows.map((r) => r.recipient_id).filter(Boolean)));
+
+    // 2) Optional: fetch profiles for names/avatars
+    const profilesById = new Map<string, { full_name: string | null; avatar_url: string | null }>();
+    if (recipientIds.length > 0) {
+      const { data: profiles, error: profErr } = await supabase
+        .from('profiles')
+        .select('id, full_name, avatar_url')
+        .in('id', recipientIds);
+
+      if (profErr) {
+        console.error('[ListingRequestsScreen] fetch profiles', profErr);
+      } else {
+        for (const p of profiles ?? []) {
+          profilesById.set(p.id, { full_name: p.full_name ?? null, avatar_url: p.avatar_url ?? null });
+        }
+      }
+    }
+
+    const toItem = (r: { id: string; recipient_id: string; created_at: string | null }) => {
+      const profile = profilesById.get(r.recipient_id);
+      return {
+        id: r.id,
+        requesterName: profile?.full_name?.trim() || r.recipient_id,
+        avatar: profile?.avatar_url ? { uri: profile.avatar_url } : undefined,
+        distance: '—',
+        requestedAt: formatTimeAgo(r.created_at),
+        priority: 'medium' as const,
+      };
+    };
+
+    setPendingRequests(rows.filter((r) => r.status === 'pending').map(toItem));
+    setAcceptedRequests(rows.filter((r) => r.status === 'won').map(toItem));
+    setIsRefreshing(false);
+  }, [listingId]);
+
+  useEffect(() => {
+    fetchRequests();
+  }, [fetchRequests]);
 
   const handleBack = () => {
     if (navigation.canGoBack()) navigation.goBack();
   };
 
-  const handleAccept = (requestId: string) => {
-    const accepted = pendingRequests.find((r) => r.id === requestId);
-    if (accepted) {
-      setPendingRequests((prev) => prev.filter((r) => r.id !== requestId));
-      setAcceptedRequests((prev) => [...prev, accepted]);
-    }
-  };
+  const handleAccept = useCallback(
+    async (requestId: string) => {
+      if (isMutatingRef.current) return;
+      isMutatingRef.current = true;
+      setMutatingRequestId(requestId);
+      try {
+        const { error } = await supabase.rpc('provider_accept_request', { p_request_id: requestId });
+        if (error) {
+          console.error('[ListingRequestsScreen] provider_accept_request', error);
+          return;
+        }
+        await fetchRequests();
+      } finally {
+        setMutatingRequestId(null);
+        isMutatingRef.current = false;
+      }
+    },
+    [fetchRequests]
+  );
 
-  const handleDecline = (requestId: string) => {
-    setPendingRequests((prev) => prev.filter((r) => r.id !== requestId));
-  };
+  const handleDecline = useCallback(
+    async (requestId: string) => {
+      if (isMutatingRef.current) return;
+      isMutatingRef.current = true;
+      setMutatingRequestId(requestId);
+      try {
+        const { error } = await supabase.rpc('provider_decline_request', { p_request_id: requestId });
+        if (error) {
+          console.error('[ListingRequestsScreen] provider_decline_request', error);
+          return;
+        }
+        await fetchRequests();
+      } finally {
+        setMutatingRequestId(null);
+        isMutatingRef.current = false;
+      }
+    },
+    [fetchRequests]
+  );
 
   const handleQRCode = (requestId: string) => {
     // TODO: navigate to QR code screen
   };
 
-  const handlePinCode = (requestId: string) => {
-    setVerifyModalRequestId(requestId);
-  };
+  const handlePinCode = async (requestId: string) => {
+    if (!listingId || !requestId) return;
 
-  const handleVerifyPickup = (pin: string) => {
-    if (verifyModalRequestId) {
-      // TODO: verify PIN with backend for this request
+    const { pin, error } = await generatePickupPinApi(listingId);
+    if (error || !pin) {
+      Alert.alert('Unable to generate PIN', error ?? 'Please try again.');
+      return;
     }
-    setVerifyModalRequestId(null);
+
+    Alert.alert(
+      'Pickup PIN',
+      `Show this PIN to the recipient at pickup:\n\n${pin}\n\nThis PIN may only be shown once—keep it private.`
+    );
   };
 
   const pendingCount = pendingRequests.length;
@@ -229,6 +330,7 @@ export default function ListingRequestsScreen() {
                   key={req.id}
                   item={req}
                   variant="pending"
+                  disabled={isRefreshing || mutatingRequestId === req.id}
                   onAccept={() => handleAccept(req.id)}
                   onDecline={() => handleDecline(req.id)}
                 />
@@ -295,11 +397,6 @@ export default function ListingRequestsScreen() {
       )}
       </View>
 
-      <VerifyPickupModal
-        visible={!!verifyModalRequestId}
-        onClose={() => setVerifyModalRequestId(null)}
-        onVerify={handleVerifyPickup}
-      />
     </View>
   );
 }

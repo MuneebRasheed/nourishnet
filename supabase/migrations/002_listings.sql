@@ -52,9 +52,9 @@ CREATE POLICY "Users can delete own listings"
 
 -- Optional: allow public/recipients to read active listings (for discovery)
 -- Uncomment if you want a public feed later:
--- DROP POLICY IF EXISTS "Anyone can read active listings" ON public.listings;
--- CREATE POLICY "Anyone can read active listings"
---   ON public.listings FOR SELECT
---   USING (status = 'active');
+DROP POLICY IF EXISTS "Anyone can read active listings" ON public.listings;
+CREATE POLICY "Anyone can read active listings"
+  ON public.listings FOR SELECT
+  USING (status = 'active');
 
 COMMENT ON TABLE public.listings IS 'Food surplus listings posted by providers';

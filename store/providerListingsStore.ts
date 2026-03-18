@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-export type ProviderListingStatus = 'active' | 'completed';
+export type ProviderListingStatus = 'active' | 'request_open' | 'claimed' | 'completed' | 'cancelled';
 
 export type ProviderListing = {
   id: string;

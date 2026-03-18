@@ -77,6 +77,7 @@ const SignupScreen = () => {
       navigation.navigate('VerificationCodeScreen', {
         email: trimmedEmail,
         context: 'signup',
+        password,
         ...(role && { role }),
       })
     } finally {

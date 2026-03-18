@@ -57,9 +57,14 @@ export default function ProviderHomeScreen() {
     }, [setListings])
   );
 
+  const ACTIVE_LISTING_STATUSES = useMemo(
+    () => new Set<ProviderListing['status']>(['active', 'request_open', 'claimed']),
+    []
+  );
+
   const listings = useMemo(
-    () => allListings.filter((l) => l.status === 'active'),
-    [allListings]
+    () => allListings.filter((l) => ACTIVE_LISTING_STATUSES.has(l.status)),
+    [ACTIVE_LISTING_STATUSES, allListings]
   );
   const completedCount = useMemo(
     () => allListings.filter((l) => l.status === 'completed').length,
@@ -284,7 +289,7 @@ export default function ProviderHomeScreen() {
                 timeRangeLabel={`${listing.startTime} - ${listing.endTime}`}
                 address={listing.pickupAddress}
                 foodType={listing.foodType}
-                statusLabel={listing.status === 'active' ? 'Active' : 'Completed'}
+                statusLabel={ACTIVE_LISTING_STATUSES.has(listing.status) ? 'Active' : 'Completed'}
                 onPressViewRequests={handleViewListings}
                 onEdit={() => handleEditListing(listing)}
                 onDelete={() => handleDeleteListing(listing)}

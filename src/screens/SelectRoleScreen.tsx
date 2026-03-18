@@ -6,6 +6,8 @@ import { getColors, palette } from '../../utils/colors'
 import { useAppFontSizes } from '../../theme/fonts'
 import { fontFamilies } from '../../theme/typography'
 import SplashIcon from '../assets/svgs/SplashIcon'
+import RoleBulb from '../assets/svgs/RoleBulb'
+import HandLogo from '../assets/svgs/HandLogo'
 import RoleCard from '../components/RoleCard'
 import { RootStackParamList } from '../navigations/RootNavigation'
 import { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -67,6 +69,13 @@ const SelectRoleScreen = () => {
               title="Food Provider"
               description="Share surplus food from your restaurant, bakery, or home with those in need"
               iconColor={isDark ? palette.roleBulbColor3 : palette.roleBulbColor1}
+              icon={
+                <RoleBulb
+                  color={isDark ? palette.roleBulbColor3 : palette.roleBulbColor1}
+                  width={40}
+                  height={40}
+                />
+              }
               iconBackgroundColor={isDark ? colors.surfaceBorder : palette.white}
               iconWrapperBackgroundColor={isDark ? colors.inputFieldBg : palette.roleCardbg}
               onPress={handleFoodProvider}
@@ -75,6 +84,13 @@ const SelectRoleScreen = () => {
               title="Food Recipient"
               description="Find nutritious food available near you and connect with your community"
               iconColor={isDark ? palette.roleBulbColor4 : palette.roleBulbColor2}
+              icon={
+                <HandLogo
+                  color={isDark ? palette.roleBulbColor4 : palette.roleBulbColor2}
+                  width={40}
+                  height={40}
+                />
+              }
               iconBackgroundColor={isDark ? colors.surfaceBorder : palette.white}
               iconWrapperBackgroundColor={isDark ? colors.inputFieldBg : palette.roleCard}
               onPress={handleFoodRecipient}

@@ -44,12 +44,18 @@ export default function ProviderListingsScreen() {
 type RootNav = NativeStackNavigationProp<RootStackParamList, keyof RootStackParamList>;
 const navigation = useNavigation<CompositeNavigationProp<ListingsNav, RootNav>>();
 
+  const ACTIVE_LISTING_STATUSES = useMemo(
+    () => new Set<ProviderListing['status']>(['active', 'request_open', 'claimed']),
+    []
+  );
+
   const listings = useMemo(
     () =>
-      allListings.filter(
-        (l) => l.status === (activeTab === 'Active' ? 'active' : 'completed')
-      ),
-    [allListings, activeTab]
+      allListings.filter((l) => {
+        if (activeTab === 'Active') return ACTIVE_LISTING_STATUSES.has(l.status);
+        return l.status === 'completed';
+      }),
+    [ACTIVE_LISTING_STATUSES, allListings, activeTab]
   );
 
   const handleCreateListing = () => {
@@ -180,8 +186,8 @@ const navigation = useNavigation<CompositeNavigationProp<ListingsNav, RootNav>>(
                 timeRangeLabel={`${listing.startTime} - ${listing.endTime}`}
                 address={listing.pickupAddress}
                 foodType={listing.foodType}
-                statusLabel={listing.status === 'active' ? 'Active' : 'Completed'}
-                statusColor={listing.status === 'active' ? palette.roleBulbColor2 : colors.textSecondary}
+                statusLabel={ACTIVE_LISTING_STATUSES.has(listing.status) ? 'Active' : 'Completed'}
+                statusColor={ACTIVE_LISTING_STATUSES.has(listing.status) ? palette.roleBulbColor2 : colors.textSecondary}
                 onPressViewRequests={() => handleViewRequests(listing)}
                 onEdit={() => handleEditListing(listing)}
                 onDelete={() => handleDeleteListing(listing)}

@@ -26,6 +26,7 @@ const BORDER_DARK = 'rgba(255,255,255,0.12)';
 const BORDER_LIGHT = 'rgba(0,0,0,0.1)';
 const RIPPLE_DARK = 'rgba(255,255,255,0.08)';
 const RIPPLE_LIGHT = 'rgba(0,0,0,0.06)';
+const DEFAULT_ROW_BG = '#2E3842';
 
 export default function SettingsRow({
   icon,
@@ -43,7 +44,7 @@ export default function SettingsRow({
   const colors = getColors(isDark);
   const fonts = useAppFontSizes();
 
-  const bg = backgroundColor ?? colors.inputFieldBg;
+  const bg = backgroundColor ?? DEFAULT_ROW_BG;
   const iconBackground = iconBg ?? (isDark ? ICON_BG_DARK : ICON_BG_LIGHT);
   const labelColorResolved = labelColor ?? colors.text;
   const borderColor = isDark ? BORDER_DARK : BORDER_LIGHT;

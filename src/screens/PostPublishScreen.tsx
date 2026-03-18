@@ -31,6 +31,7 @@ import ClockICon from '../assets/svgs/ClockICon';
 import LocationPin from '../assets/svgs/LocationPin';
 import { useProviderListingsStore } from '../../store/providerListingsStore';
 import { createListingApi, updateListingApi } from '../lib/api/listings';
+import { supabase } from '../lib/supabase';
 
 function formatTimeForDisplay(date: Date): string {
   return date.toLocaleTimeString('en-US', {
@@ -167,6 +168,13 @@ export default function PostPublishScreen() {
 
     const draft = route.params?.draft;
     if (!draft) return;
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      Alert.alert('Sign in required', 'Please sign in again to publish or edit listings.');
+      navigation.replace('LoginScreen');
+      return;
+    }
 
     const payload = {
       title: draft.foodTitle || 'Food name',

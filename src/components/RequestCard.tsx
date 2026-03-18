@@ -55,6 +55,7 @@ type RequestCardProps = {
   onDecline?: () => void;
   onQRCode?: () => void;
   onPinCode?: () => void;
+  disabled?: boolean;
 };
 
 export function RequestCard({
@@ -64,6 +65,7 @@ export function RequestCard({
   onDecline,
   onQRCode,
   onPinCode,
+  disabled = false,
 }: RequestCardProps) {
   const theme = useThemeStore((s) => s.theme);
   const isDark = theme === 'dark';
@@ -149,8 +151,9 @@ export function RequestCard({
         ) : (
           <>
             <Pressable
+              disabled={disabled}
               onPress={onAccept}
-              style={[styles.acceptBtn, { backgroundColor: colors.primary }]}
+              style={[styles.acceptBtn, { backgroundColor: colors.primary }, disabled && styles.disabledBtn]}
             >
               <Ionicons name="checkmark" size={20} color={palette.white} />
               <Text
@@ -163,8 +166,13 @@ export function RequestCard({
               </Text>
             </Pressable>
             <Pressable
+              disabled={disabled}
               onPress={onDecline}
-              style={[styles.declineBtn, { backgroundColor: colors.requestBtnBg,borderColor: colors.borderColor,borderWidth: 1,}]}
+              style={[
+                styles.declineBtn,
+                { backgroundColor: colors.requestBtnBg, borderColor: colors.borderColor, borderWidth: 1 },
+                disabled && styles.disabledBtn,
+              ]}
             >
               <Ionicons name="close" size={20} color={colors.text} />
               <Text
@@ -238,6 +246,9 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 12,
     borderRadius: 100,
+  },
+  disabledBtn: {
+    opacity: 0.5,
   },
   btnLabel: {},
   btnLabel2:{
