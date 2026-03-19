@@ -36,18 +36,17 @@ export function PickupPinModal({ visible, pin, onClose }: PickupPinModalProps) {
 
     setSecondsLeft(10);
     const interval = setInterval(() => {
-      setSecondsLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          onClose();
-          return 0;
-        }
-        return prev - 1;
-      });
+      setSecondsLeft((prev) => Math.max(0, prev - 1));
     }, 1000);
 
     return () => clearInterval(interval);
   }, [visible, onClose]);
+
+  useEffect(() => {
+    if (!visible) return;
+    if (secondsLeft > 0) return;
+    onClose();
+  }, [secondsLeft, visible, onClose]);
 
   if (!visible) return null;
 

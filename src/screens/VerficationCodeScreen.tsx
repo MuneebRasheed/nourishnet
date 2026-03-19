@@ -114,7 +114,14 @@ export default function VerificationCodeScreen({ route }: Props) {
           return;
         }
       } else {
-        await supabase.auth.refreshSession();
+        const { error: refreshError } = await supabase.auth.refreshSession();
+        if (refreshError) {
+          const msg = (refreshError.message ?? '').toLowerCase();
+          if (!(msg.includes('refresh token') && msg.includes('not found'))) {
+            setError(refreshError.message ?? 'Session refresh failed. Please sign in again.');
+            return;
+          }
+        }
       }
       if (role === 'provider') {
         navigation.replace('ProviderProfileScreen', { email, otp });

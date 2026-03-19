@@ -68,8 +68,22 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   const now = Date.now();
   const shouldRefresh = expiresAt != null && expiresAt <= now + 60_000; // refresh if <= 60s remaining
   if (!session || shouldRefresh) {
-    const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
-    if (!refreshError) session = refreshed.session ?? null;
+    try {
+      const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+      if (!refreshError) {
+        session = refreshed.session ?? null;
+      } else {
+        const msg = (refreshError.message ?? '').toLowerCase();
+        if (!(msg.includes('refresh token') && msg.includes('not found'))) {
+          // Keep existing session fallback behavior for non-token-not-found errors.
+          session = initialSession ?? null;
+        } else {
+          session = null;
+        }
+      }
+    } catch {
+      session = initialSession ?? null;
+    }
   }
 
   const token = session?.access_token;

@@ -66,7 +66,15 @@ export default function SettingsScreen() {
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      const msg = (error.message ?? '').toLowerCase();
+      // If token is already missing, treat user as logged out.
+      if (!(msg.includes('refresh token') && msg.includes('not found'))) {
+        Alert.alert('Logout failed', error.message ?? 'Please try again.');
+        return;
+      }
+    }
     clearAuth();
     navigation.dispatch(
       CommonActions.reset({
