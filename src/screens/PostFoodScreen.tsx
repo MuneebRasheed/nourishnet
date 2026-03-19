@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import {
+  Alert,
   StyleSheet,
   Text,
   View,
   ScrollView,
   TouchableOpacity,
   TextInput,
+  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -22,6 +24,7 @@ import ContinueButton from '../components/ContinueButton';
 import { AuthInput } from '../components/AuthInput';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import ArrowBACK from '../assets/svgs/ArrowBACK';
+import { pickListingImage } from '../lib/uploadListingImage';
 
 const FOOD_TYPES = ['Prepared Meals', 'Baked Goods', 'Produce', 'Dairy', 'Pantry', 'Other'];
 const QUANTITY_UNITS = ['Bags', 'Portions', 'Pounds', 'Kilos', 'Servings', 'Items'];
@@ -35,6 +38,9 @@ export type PostFoodDraft = {
   foodTitle: string;
   dietarySelected: string[];
   allergensSelected: string[];
+  foodImageUri?: string | null;
+  foodImageBase64?: string | null;
+  foodImageMimeType?: string | null;
 };
 
 export default function PostFoodScreen() {
@@ -55,6 +61,9 @@ export default function PostFoodScreen() {
       : QUANTITY_UNITS[0]
   );
   const [foodTitle, setFoodTitle] = useState(editListing?.title ?? '');
+  const [foodImageUri, setFoodImageUri] = useState<string | null>(editListing?.imageUrl ?? null);
+  const [foodImageBase64, setFoodImageBase64] = useState<string | null>(null);
+  const [foodImageMimeType, setFoodImageMimeType] = useState<string | null>(null);
   const [dietarySelected, setDietarySelected] = useState<string[]>(editListing?.dietaryTags ?? []);
   const [allergensSelected, setAllergensSelected] = useState<string[]>(editListing?.allergens ?? []);
   const [showFoodTypeOptions, setShowFoodTypeOptions] = useState(false);
@@ -70,6 +79,9 @@ export default function PostFoodScreen() {
           : QUANTITY_UNITS[0]
       );
       setFoodTitle(editListing.title ?? '');
+      setFoodImageUri(editListing.imageUrl ?? null);
+      setFoodImageBase64(null);
+      setFoodImageMimeType(null);
       setDietarySelected(editListing.dietaryTags ?? []);
       setAllergensSelected(editListing.allergens ?? []);
     } else {
@@ -77,6 +89,9 @@ export default function PostFoodScreen() {
       setQuantity('');
       setQuantityUnit(QUANTITY_UNITS[0]);
       setFoodTitle('');
+      setFoodImageUri(null);
+      setFoodImageBase64(null);
+      setFoodImageMimeType(null);
       setDietarySelected([]);
       setAllergensSelected([]);
     }
@@ -106,8 +121,29 @@ export default function PostFoodScreen() {
       foodTitle,
       dietarySelected,
       allergensSelected,
+      foodImageUri,
+      foodImageBase64,
+      foodImageMimeType,
     };
     navigation.navigate('PostPublishScreen', { draft, editListing: editListing ?? undefined });
+  };
+
+  const handlePickFoodImage = async () => {
+    const picked = await pickListingImage();
+    if (!picked) return;
+    if ('denied' in picked && picked.denied) {
+      Alert.alert('Permission required', 'Please allow photo library access to add a food image.');
+      return;
+    }
+    setFoodImageUri(picked.uri);
+    setFoodImageBase64(picked.base64);
+    setFoodImageMimeType(picked.mimeType);
+  };
+
+  const handleRemoveFoodImage = () => {
+    setFoodImageUri(null);
+    setFoodImageBase64(null);
+    setFoodImageMimeType(null);
   };
 
   const arrowColor = isDark ? colors.textSecondary : colors.text;
@@ -279,6 +315,35 @@ export default function PostFoodScreen() {
           />
         </View>
 
+        <View style={styles.fieldGroup}>
+          <Text style={[styles.label, { color: colors.text, fontFamily: fontFamilies.interMedium, fontSize: fonts.subhead }]}>
+            Food Image
+          </Text>
+          <TouchableOpacity
+            style={[styles.imagePickerButton, { backgroundColor: colors.inputFieldBg, borderColor: colors.borderColor }]}
+            activeOpacity={0.8}
+            onPress={handlePickFoodImage}
+          >
+            <MaterialIcons name="add-a-photo" size={20} color={colors.text} />
+            <Text style={[styles.imagePickerButtonText, { color: colors.text, fontFamily: fontFamilies.inter, fontSize: fonts.subhead }]}>
+              {foodImageUri ? 'Change image' : 'Add image'}
+            </Text>
+          </TouchableOpacity>
+          {foodImageUri ? (
+            <View style={styles.imagePreviewWrap}>
+              <Image source={{ uri: foodImageUri }} style={styles.imagePreview} resizeMode="cover" />
+              <TouchableOpacity
+                style={[styles.removeImageButton, { backgroundColor: colors.inputFieldBg, borderColor: colors.borderColor }]}
+                onPress={handleRemoveFoodImage}
+                activeOpacity={0.8}
+              >
+                <MaterialIcons name="delete-outline" size={18} color={colors.text} />
+                <Text style={[styles.removeImageText, { color: colors.text, fontFamily: fontFamilies.inter }]}>Remove</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+        </View>
+
         {/* Dietary Tags */}
         <Text
           style={[
@@ -395,6 +460,36 @@ const styles = StyleSheet.create({
   authInputContainer: {
     marginBottom: 0,
   },
+  imagePickerButton: {
+    borderWidth: 1,
+    borderRadius: 12,
+    minHeight: 50,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  imagePickerButtonText: {},
+  imagePreviewWrap: {
+    marginTop: 10,
+  },
+  imagePreview: {
+    width: '100%',
+    height: 180,
+    borderRadius: 12,
+  },
+  removeImageButton: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  removeImageText: {},
   nextButton: {
     marginTop: 32,
     width: '100%',

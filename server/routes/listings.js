@@ -51,6 +51,7 @@ router.post('/', async (req, res) => {
       quantity_unit: typeof body.quantityUnit === 'string' ? body.quantityUnit : 'Portions',
       dietary_tags: Array.isArray(body.dietaryTags) ? body.dietaryTags : [],
       allergens: Array.isArray(body.allergens) ? body.allergens : [],
+      image_url: typeof body.imageUrl === 'string' ? body.imageUrl.trim() : null,
       pickup_address: typeof body.pickupAddress === 'string' ? body.pickupAddress.trim() : '',
       start_time: typeof body.startTime === 'string' ? body.startTime : '',
       end_time: typeof body.endTime === 'string' ? body.endTime : '',
@@ -344,6 +345,7 @@ router.patch('/:id', async (req, res) => {
     if (typeof body.quantityUnit === 'string') updates.quantity_unit = body.quantityUnit;
     if (Array.isArray(body.dietaryTags)) updates.dietary_tags = body.dietaryTags;
     if (Array.isArray(body.allergens)) updates.allergens = body.allergens;
+    if (body.imageUrl !== undefined) updates.image_url = typeof body.imageUrl === 'string' ? body.imageUrl.trim() : null;
     if (typeof body.pickupAddress === 'string') updates.pickup_address = body.pickupAddress.trim();
     if (typeof body.startTime === 'string') updates.start_time = body.startTime;
     if (typeof body.endTime === 'string') updates.end_time = body.endTime;

@@ -32,6 +32,7 @@ import LocationPin from '../assets/svgs/LocationPin';
 import { useProviderListingsStore } from '../../store/providerListingsStore';
 import { createListingApi, updateListingApi } from '../lib/api/listings';
 import { supabase } from '../lib/supabase';
+import { uploadListingImage } from '../lib/uploadListingImage';
 
 function formatTimeForDisplay(date: Date): string {
   return date.toLocaleTimeString('en-US', {
@@ -183,6 +184,7 @@ export default function PostPublishScreen() {
       quantityUnit: draft.quantityUnit,
       dietaryTags: draft.dietarySelected,
       allergens: draft.allergensSelected,
+      imageUrl: draft.foodImageUri ?? null,
       pickupAddress,
       startTime: pickupStart ? formatTimeForDisplay(pickupStart) : '4:00 PM',
       endTime: pickupEnd ? formatTimeForDisplay(pickupEnd) : '5:30 PM',
@@ -191,6 +193,21 @@ export default function PostPublishScreen() {
 
     setPublishing(true);
     try {
+      const hasNewImage = Boolean(draft.foodImageUri && draft.foodImageBase64);
+      if (hasNewImage && draft.foodImageBase64) {
+        const uploaded = await uploadListingImage(
+          session.user.id,
+          draft.foodImageBase64,
+          editListing?.id,
+          draft.foodImageMimeType ?? 'image/jpeg'
+        );
+        if (!uploaded) {
+          Alert.alert('Image upload failed', 'Unable to upload image. Please try again.');
+          return;
+        }
+        payload.imageUrl = uploaded;
+      }
+
       if (editListing) {
         const { listing, error } = await updateListingApi(editListing.id, payload);
         if (error || !listing) {

@@ -12,6 +12,7 @@ type ApiListing = {
   quantity_unit: string;
   dietary_tags: string[];
   allergens: string[];
+  image_url?: string | null;
   pickup_address: string;
   start_time: string;
   end_time: string;
@@ -32,6 +33,7 @@ function mapApiToListing(row: ApiListing): ProviderListing {
     quantityUnit: row.quantity_unit ?? 'Portions',
     dietaryTags: row.dietary_tags ?? [],
     allergens: row.allergens ?? [],
+    imageUrl: row.image_url ?? null,
     pickupAddress: row.pickup_address ?? '',
     startTime: row.start_time ?? '',
     endTime: row.end_time ?? '',
@@ -73,6 +75,7 @@ export async function createListingApi(draft: ProviderListingDraft): Promise<{ l
       quantityUnit: draft.quantityUnit,
       dietaryTags: draft.dietaryTags,
       allergens: draft.allergens,
+      imageUrl: draft.imageUrl ?? null,
       pickupAddress: draft.pickupAddress,
       startTime: draft.startTime,
       endTime: draft.endTime,
@@ -273,6 +276,7 @@ export async function updateListingApi(
       quantityUnit: draft.quantityUnit,
       dietaryTags: draft.dietaryTags,
       allergens: draft.allergens,
+      imageUrl: draft.imageUrl ?? null,
       pickupAddress: draft.pickupAddress,
       startTime: draft.startTime,
       endTime: draft.endTime,

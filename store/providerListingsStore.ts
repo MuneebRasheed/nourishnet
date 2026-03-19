@@ -12,6 +12,7 @@ export type ProviderListing = {
   quantityUnit: string;
   dietaryTags: string[];
   allergens: string[];
+  imageUrl?: string | null;
   pickupAddress: string;
   startTime: string;
   endTime: string;
