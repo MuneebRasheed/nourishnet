@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useThemeStore } from '../../store/themeStore';
+import { useAuthStore } from '../../store/authStore';
 import { useRequestedListingsStore } from '../../store/requestedListingsStore';
 import { getColors, palette } from '../../utils/colors';
 import { useAppFontSizes } from '../../theme/fonts';
@@ -21,6 +22,7 @@ import CategoryChips from '../components/CategoryChips';
 import FoodCard, { FoodCardData } from '../components/FoodCard';
 import BoxIcon from '../assets/svgs/BoxIcon';
 import type { FoodDetailItem } from './FoodDetailScreen';
+import { getAvatarLetter, getDisplayName } from '../lib/profile';
 
 const DEFAULT_LISTING_IMAGE = require('../assets/images/FoodOnboard1.png');
 
@@ -98,6 +100,7 @@ export default function HomeScreen() {
   const fonts = useAppFontSizes();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const profile = useAuthStore((s) => s.profile);
   const [browseListings, setBrowseListings] = useState<ProviderListing[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -230,7 +233,11 @@ export default function HomeScreen() {
         }
       >
         <View style={styles.content}>
-          <HomeHeader />
+          <HomeHeader
+            userName={getDisplayName(profile)}
+            avatarLetter={getAvatarLetter(profile)}
+            avatarSource={profile?.avatar_url ? { uri: profile.avatar_url } : undefined}
+          />
           <View style={styles.searchSection}>
             <SearchBarWithFilter
               placeholder="Enter here"

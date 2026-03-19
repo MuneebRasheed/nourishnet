@@ -138,7 +138,14 @@ export async function requestClaimApi(listingId: string): Promise<{ request: any
   const res = await fetch(`${API_BASE_URL}/listings/${listingId}/request`, { method: 'POST', headers });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    return { request: null, error: data?.error ?? 'Failed to request claim' };
+    const msg = (data?.error || '').trim();
+    const mapped =
+      msg === 'already_requested'
+        ? 'already_requested'
+        : msg === 'listing_not_requestable'
+          ? 'listing_not_requestable'
+          : msg || 'Failed to request claim';
+    return { request: null, error: mapped };
   }
   return { request: data.request ?? null };
 }

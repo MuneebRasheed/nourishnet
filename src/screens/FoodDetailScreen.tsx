@@ -90,6 +90,11 @@ function FoodDetailScreen() {
     setShowPickupVerifiedModal(true);
   };
 
+  const handlePickupVerifiedClose = () => {
+    setShowPickupVerifiedModal(false);
+    navigation.navigate('MainTabs', { screen: 'Home' });
+  };
+
   if (!item) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -341,7 +346,7 @@ function FoodDetailScreen() {
                 const { request, error } = await requestClaimApi(item.id);
                 if (error || !request) {
                   // Already requested or listing not requestable: refresh UI, no error modal.
-                  if (error === 'listing_not_requestable') {
+                  if (error === 'listing_not_requestable' || error === 'already_requested') {
                     useRequestedListingsStore.getState().addRequestedId(item.id);
                     setRequestSubmitted(true);
                     return;
@@ -372,7 +377,7 @@ function FoodDetailScreen() {
       />
       <PickupVerifiedModal
         visible={showPickupVerifiedModal}
-        onClose={() => setShowPickupVerifiedModal(false)}
+        onClose={handlePickupVerifiedClose}
       />
     </View>
   );
