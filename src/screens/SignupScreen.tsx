@@ -31,26 +31,32 @@ const SignupScreen = () => {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [emailError, setEmailError] = useState('')
+  const [passwordError, setPasswordError] = useState('')
+  const [confirmPasswordError, setConfirmPasswordError] = useState('')
+  const [formError, setFormError] = useState('')
 
   const handleSignUp = async () => {
     if (loading) return
-    setError('')
+    setEmailError('')
+    setPasswordError('')
+    setConfirmPasswordError('')
+    setFormError('')
     const trimmedEmail = email.trim()
     if (!trimmedEmail) {
-      setError('Please enter your email.')
+      setEmailError('Please enter your email.')
       return
     }
     if (!password) {
-      setError('Please enter a password.')
+      setPasswordError('Please enter a password.')
       return
     }
     if (password.length < 6) {
-      setError('Password must be at least 6 characters.')
+      setPasswordError('Password must be at least 6 characters.')
       return
     }
     if (password !== confirmPassword) {
-      setError('Passwords do not match.')
+      setConfirmPasswordError('Passwords do not match.')
       return
     }
 
@@ -61,7 +67,7 @@ const SignupScreen = () => {
         password,
       })
       if (signUpError) {
-        setError(signUpError.message ?? 'Sign up failed. Please try again.')
+        setFormError(signUpError.message ?? 'Sign up failed. Please try again.')
         return
       }
       const res = await fetch(`${API_BASE_URL}/auth/send-signup-otp`, {
@@ -71,7 +77,7 @@ const SignupScreen = () => {
       })
       const body = await res.json().catch(() => ({}))
       if (!res.ok && body?.error) {
-        setError(body.error)
+        setFormError(body.error)
         return
       }
       navigation.navigate('VerificationCodeScreen', {
@@ -125,27 +131,81 @@ const SignupScreen = () => {
           <AuthInput
             type="email"
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(v) => {
+              setEmail(v)
+              if (emailError) setEmailError('')
+              if (formError) setFormError('')
+            }}
             placeholder="abc@gmail.com"
           />
+          {emailError ? (
+            <Text
+              style={[
+                styles.fieldErrorText,
+                {
+                  color: '#dc2626',
+                  fontFamily: fontFamilies.inter,
+                  fontSize: fonts.subhead,
+                },
+              ]}
+            >
+              {emailError}
+            </Text>
+          ) : null}
 
           <AuthInput
             type="password"
             label="Password"
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(v) => {
+              setPassword(v)
+              if (passwordError) setPasswordError('')
+              if (formError) setFormError('')
+            }}
             showPasswordToggle
           />
+          {passwordError ? (
+            <Text
+              style={[
+                styles.fieldErrorText,
+                {
+                  color: '#dc2626',
+                  fontFamily: fontFamilies.inter,
+                  fontSize: fonts.subhead,
+                },
+              ]}
+            >
+              {passwordError}
+            </Text>
+          ) : null}
 
           <AuthInput
             type="password"
             label="Confirm Password"
             value={confirmPassword}
-            onChangeText={setConfirmPassword}
+            onChangeText={(v) => {
+              setConfirmPassword(v)
+              if (confirmPasswordError) setConfirmPasswordError('')
+              if (formError) setFormError('')
+            }}
             showPasswordToggle
           />
+          {confirmPasswordError ? (
+            <Text
+              style={[
+                styles.fieldErrorText,
+                {
+                  color: '#dc2626',
+                  fontFamily: fontFamilies.inter,
+                  fontSize: fonts.subhead,
+                },
+              ]}
+            >
+              {confirmPasswordError}
+            </Text>
+          ) : null}
 </View>
-          {error ? (
+          {formError ? (
             <Text
               style={[
                 styles.errorText,
@@ -156,7 +216,7 @@ const SignupScreen = () => {
                 },
               ]}
             >
-              {error}
+              {formError}
             </Text>
           ) : null}
           <View style={styles.signUpBtn}>
@@ -282,5 +342,9 @@ const styles = StyleSheet.create({
   errorText: {
     marginTop: 12,
     textAlign: 'center',
+  },
+  fieldErrorText: {
+    marginTop: -14,
+    marginBottom: 8,
   },
 })

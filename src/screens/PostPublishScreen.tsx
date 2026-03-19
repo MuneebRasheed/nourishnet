@@ -79,12 +79,12 @@ export default function PostPublishScreen() {
 
   const getDefaultStart = () => {
     const d = new Date();
-    d.setHours(16, 0, 0, 0);
+    d.setHours(6, 0, 0, 0);
     return d;
   };
   const getDefaultEnd = () => {
     const d = new Date();
-    d.setHours(17, 30, 0, 0);
+    d.setHours(18, 0, 0, 0);
     return d;
   };
 
@@ -165,10 +165,28 @@ export default function PostPublishScreen() {
 
   const allConfirmed = confirmations.every(Boolean);
   const handlePublish = async () => {
-    if (!allConfirmed) return;
-
     const draft = route.params?.draft;
     if (!draft) return;
+
+    const trimmedAddress = pickupAddress.trim();
+    const hasStartTime = Boolean(pickupStart);
+    const hasEndTime = Boolean(pickupEnd);
+
+    if (!trimmedAddress) {
+      Alert.alert('Missing required field', 'Please enter the pickup address.');
+      return;
+    }
+    if (!hasStartTime || !hasEndTime) {
+      Alert.alert('Missing required field', 'Please select both start and end pickup times.');
+      return;
+    }
+    if (!allConfirmed) {
+      Alert.alert(
+        'Food safety confirmation required',
+        'Please confirm all food safety items before publishing.'
+      );
+      return;
+    }
 
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) {
@@ -186,8 +204,8 @@ export default function PostPublishScreen() {
       allergens: draft.allergensSelected,
       imageUrl: draft.foodImageUri ?? null,
       pickupAddress,
-      startTime: pickupStart ? formatTimeForDisplay(pickupStart) : '4:00 PM',
-      endTime: pickupEnd ? formatTimeForDisplay(pickupEnd) : '5:30 PM',
+      startTime: pickupStart ? formatTimeForDisplay(pickupStart) : '6:00 AM',
+      endTime: pickupEnd ? formatTimeForDisplay(pickupEnd) : '6:00 PM',
       note,
     };
 
@@ -272,7 +290,7 @@ export default function PostPublishScreen() {
         <View style={styles.fieldGroup}>
           <AuthInput
             type="text"
-            label="Pickup Address"
+            label="Pickup Address*"
             placeholder="Enter pickup address"
             value={pickupAddress}
             onChangeText={setPickupAddress}
@@ -285,7 +303,7 @@ export default function PostPublishScreen() {
           <View style={styles.timeFieldsRow}>
             <View style={styles.timeFieldHalf}>
               <Text style={[styles.timeFieldLabel, { color: colors.text, fontFamily: fontFamilies.interMedium, fontSize: fonts.caption }]}>
-                Start Time
+                Start Time*
               </Text>
               <TouchableOpacity
                 style={[styles.timeFieldCard, { backgroundColor: colors.inputFieldBg }]}
@@ -308,7 +326,7 @@ export default function PostPublishScreen() {
             </View>
             <View style={styles.timeFieldHalf}>
               <Text style={[styles.timeFieldLabel, { color: colors.text, fontFamily: fontFamilies.interMedium, fontSize: fonts.caption }]}>
-                End Time
+                End Time*
               </Text>
               <TouchableOpacity
                 style={[styles.timeFieldCard, { backgroundColor: colors.inputFieldBg }]}

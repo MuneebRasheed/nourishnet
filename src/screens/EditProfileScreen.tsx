@@ -184,14 +184,20 @@ const EditProfileScreen = ({ route }: Props) => {
               value={fullName}
               onChangeText={setFullName}
             />
+            {error === 'Full name is required.' ? (
+              <Text style={[styles.fieldErrorText, { color: '#dc2626', fontFamily: fontFamilies.inter, fontSize: fonts.subhead }]}>
+                {error}
+              </Text>
+            ) : null}
             <AuthInput
               type="email"
               label="Email Address"
               placeholder="yo@email.com"
               value={(emailFromRoute || profile?.email) ?? ''}
               editable={false}
-              placeholderTextColor={palette.timerIconColor}
+              placeholderTextColor={colors.textSecondary}
               inputFieldBg={isDark ? colors.requestBtnBg : colors.inputFieldBg}
+              style={{ color: colors.textSecondary }}
             />
             <AuthInput
               type="text"
@@ -211,7 +217,7 @@ const EditProfileScreen = ({ route }: Props) => {
             />
           </View>
 
-          {error ? (
+          {error && error !== 'Full name is required.' ? (
             <Text style={[styles.errorText, { color: '#dc2626', fontFamily: fontFamilies.inter, fontSize: fonts.subhead }]}>
               {error}
             </Text>
@@ -267,8 +273,12 @@ const styles = StyleSheet.create({
     marginTop: 15,
   },
   errorText: {
-    marginTop: 8,
-    marginBottom: 4,
+    marginTop: -30,
+    marginBottom: 20,
+  },
+  fieldErrorText: {
+    marginTop: -15,
+    marginBottom: 8,
   },
   buttonWrap: {
     marginBottom: 16,

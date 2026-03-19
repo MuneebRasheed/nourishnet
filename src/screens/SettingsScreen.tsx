@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   StyleSheet,
@@ -39,6 +39,7 @@ import LightIcon from '../assets/svgs/LightIcon';
 import DeleteIcon from '../assets/svgs/DeleteIcon';
 import CrownIcon from '../assets/svgs/CrownIcon';
 import KingIcon from '../assets/svgs/KingIcon';
+import { fetchStreakTextApi } from '../lib/api/analytics';
 export default function SettingsScreen() {
   const theme = useThemeStore((s) => s.theme);
   const isDark = useResolvedIsDark();
@@ -52,6 +53,7 @@ export default function SettingsScreen() {
   const largeFont = useSettingsStore((s) => s.largeFont);
   const setLargeFont = useSettingsStore((s) => s.setLargeFont);
   const isProvider = userRole === 'provider';
+  const [streakText, setStreakText] = useState('0-day streak');
 
   const headerTop = Platform.select({
     ios: insets.top,
@@ -64,7 +66,15 @@ export default function SettingsScreen() {
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      const message = (error.message ?? '').toLowerCase();
+      // If refresh token is already gone, user is effectively signed out.
+      if (!(message.includes('refresh token') && message.includes('not found'))) {
+        Alert.alert('Logout failed', error.message ?? 'Please try again.');
+        return;
+      }
+    }
     clearAuth();
     navigation.dispatch(
       CommonActions.reset({
@@ -92,6 +102,18 @@ export default function SettingsScreen() {
     // TODO: call API to deactivate account
   };
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (userRole !== 'provider' && userRole !== 'recipient') return;
+      const { streakText: text } = await fetchStreakTextApi(userRole);
+      if (!cancelled) setStreakText(text);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userRole]);
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background, flex: 1 }]}>
       <View style={[styles.header, { marginTop: headerTop }]}>
@@ -111,7 +133,7 @@ export default function SettingsScreen() {
 
         <SettingsProfileCard
           displayName={getDisplayName(profile) || 'User'}
-          subtitle="4-day streak"
+          subtitle={streakText}
           avatarLetter={getAvatarLetter(profile)}
           avatarSource={profile?.avatar_url ? { uri: profile.avatar_url } : undefined}
           onEditPress={handleEditProfile}

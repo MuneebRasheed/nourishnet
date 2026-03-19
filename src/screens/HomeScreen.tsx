@@ -23,6 +23,7 @@ import FoodCard, { FoodCardData } from '../components/FoodCard';
 import BoxIcon from '../assets/svgs/BoxIcon';
 import type { FoodDetailItem } from './FoodDetailScreen';
 import { getAvatarLetter, getDisplayName } from '../lib/profile';
+import { fetchStreakTextApi } from '../lib/api/analytics';
 
 const DEFAULT_LISTING_IMAGE = require('../assets/images/FoodOnboard1.png');
 
@@ -101,9 +102,11 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const profile = useAuthStore((s) => s.profile);
+  const userRole = useAuthStore((s) => s.userRole);
   const [browseListings, setBrowseListings] = useState<ProviderListing[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [streakText, setStreakText] = useState('0-day streak');
 
   const fetchListings = async () => {
     const { listings, error } = await fetchBrowseListingsApi();
@@ -122,6 +125,18 @@ export default function HomeScreen() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (userRole !== 'provider' && userRole !== 'recipient') return;
+      const { streakText: text } = await fetchStreakTextApi(userRole);
+      if (!cancelled) setStreakText(text);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userRole]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -237,6 +252,7 @@ export default function HomeScreen() {
             userName={getDisplayName(profile)}
             avatarLetter={getAvatarLetter(profile)}
             avatarSource={profile?.avatar_url ? { uri: profile.avatar_url } : undefined}
+            streakText={streakText}
           />
           <View style={styles.searchSection}>
             <SearchBarWithFilter

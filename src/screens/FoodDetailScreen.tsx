@@ -508,6 +508,7 @@ const styles = StyleSheet.create({
     
     gap: 8,
     marginLeft: 28,
+    flexWrap: 'wrap',
   },
   allergenTag: {
     paddingHorizontal: 10,

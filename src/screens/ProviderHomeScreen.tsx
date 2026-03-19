@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   StyleSheet,
@@ -30,6 +30,7 @@ import ForkKnife from '../assets/svgs/ForkKnife';
 import CheckMarkHeart from '../assets/svgs/CheckMarkHeart';
 import BoxIcon from '../assets/svgs/BoxIcon';
 import ThreelinesIcon from '../assets/svgs/ThreelinesIcon';
+import { fetchStreakTextApi } from '../lib/api/analytics';
 
 const defaultAvatar = require('../assets/images/Avatar.png');
 
@@ -42,9 +43,11 @@ export default function ProviderHomeScreen() {
   const fonts = useAppFontSizes();
   const insets = useSafeAreaInsets();
   const profile = useAuthStore((s) => s.profile);
+  const userRole = useAuthStore((s) => s.userRole);
   const allListings = useProviderListingsStore((s) => s.listings);
   const setListings = useProviderListingsStore((s) => s.setListings);
   const removeListing = useProviderListingsStore((s) => s.removeListing);
+  const [streakText, setStreakText] = useState('0-day streak');
 
   useFocusEffect(
     useCallback(() => {
@@ -115,6 +118,18 @@ export default function ProviderHomeScreen() {
     );
   };
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (userRole !== 'provider' && userRole !== 'recipient') return;
+      const { streakText: text } = await fetchStreakTextApi(userRole);
+      if (!cancelled) setStreakText(text);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userRole]);
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView
@@ -129,7 +144,7 @@ export default function ProviderHomeScreen() {
           <HomeHeader
             userName={getDisplayName(profile) || undefined}
             notificationCount={NOTIFICATION_COUNT}
-            streakText="4-day streak"
+            streakText={streakText}
             avatarSource={profile?.avatar_url ? { uri: profile.avatar_url } : (defaultAvatar as ImageSourcePropType)}
           />
 

@@ -114,11 +114,36 @@ export default function PostFoodScreen() {
   };
 
   const handleNextStep = () => {
+    const trimmedTitle = foodTitle.trim();
+    const parsedQuantity = Number(quantity);
+    const hasValidQuantity = Number.isFinite(parsedQuantity) && parsedQuantity > 0;
+
+    if (!foodType) {
+      Alert.alert('Missing required field', 'Please select a food type.');
+      return;
+    }
+    if (!hasValidQuantity) {
+      Alert.alert('Missing required field', 'Please enter a quantity greater than 0.');
+      return;
+    }
+    if (!quantityUnit) {
+      Alert.alert('Missing required field', 'Please select a quantity unit.');
+      return;
+    }
+    if (!trimmedTitle) {
+      Alert.alert('Missing required field', 'Please enter a food title.');
+      return;
+    }
+    if (!foodImageUri) {
+      Alert.alert('Missing required field', 'Please add a food image.');
+      return;
+    }
+
     const draft: PostFoodDraft = {
       foodType,
-      quantity,
+      quantity: String(parsedQuantity),
       quantityUnit,
-      foodTitle,
+      foodTitle: trimmedTitle,
       dietarySelected,
       allergensSelected,
       foodImageUri,
@@ -135,6 +160,7 @@ export default function PostFoodScreen() {
       Alert.alert('Permission required', 'Please allow photo library access to add a food image.');
       return;
     }
+    if (!('uri' in picked)) return;
     setFoodImageUri(picked.uri);
     setFoodImageBase64(picked.base64);
     setFoodImageMimeType(picked.mimeType);
@@ -245,7 +271,7 @@ export default function PostFoodScreen() {
 
         <View style={styles.fieldGroup}>
           <Text style={[styles.label, { color: colors.text, fontFamily: fontFamilies.interMedium, fontSize: fonts.subhead }]}>
-            Quantity
+            Quantity*
           </Text>
           <View style={styles.quantityRow}>
             <TextInput
@@ -317,7 +343,7 @@ export default function PostFoodScreen() {
 
         <View style={styles.fieldGroup}>
           <Text style={[styles.label, { color: colors.text, fontFamily: fontFamilies.interMedium, fontSize: fonts.subhead }]}>
-            Food Image
+            Food Image*
           </Text>
           <TouchableOpacity
             style={[styles.imagePickerButton, { backgroundColor: colors.inputFieldBg, borderColor: colors.borderColor }]}

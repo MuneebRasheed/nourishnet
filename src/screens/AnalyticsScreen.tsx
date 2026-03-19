@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeStore } from '../../store/themeStore';
 import { getColors, palette } from '../../utils/colors';
 import { useAppFontSizes } from '../../theme/fonts';
 import { fontFamilies } from '../../theme/typography';
+import { useAuthStore } from '../../store/authStore';
 import SettingsHeader from '../components/SettingsHeader';
 import ImpactCard from '../components/ImpactCard';
 import HeartTab from '../assets/svgs/HeartTab';
@@ -12,9 +13,10 @@ import LeafIcon1 from '../assets/svgs/LeafIcon1';
 import BatchIcon from '../assets/svgs/BatchIcon';
 import UpwardArrow from '../assets/svgs/UpwardArrow';
 import ArrowCurve from '../assets/svgs/ArrowCurve';
+import { fetchAnalyticsSummaryApi } from '../lib/api/analytics';
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-const BAR_DATA = [0.3, 0.5, 0.4, 0.7, 0.85, 1];
+const DEFAULT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const DEFAULT_BAR_DATA = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 const CHART_HEIGHT = 120;
 
 const MILESTONES = [
@@ -39,10 +41,83 @@ const MILESTONE_PALETTE = [
 
 export default function AnalyticsScreen() {
   const theme = useThemeStore((s) => s.theme);
+  const userRole = useAuthStore((s) => s.userRole);
   const isDark = theme === 'dark';
   const colors = getColors(isDark);
   const fonts = useAppFontSizes();
   const insets = useSafeAreaInsets();
+  const [meals, setMeals] = useState(0);
+  const [poundsRescued, setPoundsRescued] = useState(0);
+  const [co2LbsSaved, setCo2LbsSaved] = useState(0);
+  const [streakDays, setStreakDays] = useState(0);
+  const [months, setMonths] = useState<string[]>(DEFAULT_MONTHS);
+  const [barData, setBarData] = useState<number[]>(DEFAULT_BAR_DATA);
+  const [firstPickupAgo, setFirstPickupAgo] = useState('Not yet');
+  const [ecoWarriorAgo, setEcoWarriorAgo] = useState('Not yet');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const formatTimeAgo = (iso: string | null): string => {
+      if (!iso) return 'Not yet';
+      const diffMs = Date.now() - new Date(iso).getTime();
+      if (!Number.isFinite(diffMs) || diffMs < 0) return 'Not yet';
+      const mins = Math.floor(diffMs / 60000);
+      if (mins < 1) return 'Just now';
+      if (mins < 60) return `${mins}m ago`;
+      const hrs = Math.floor(mins / 60);
+      if (hrs < 24) return `${hrs}h ago`;
+      const days = Math.floor(hrs / 24);
+      if (days < 7) return `${days} day${days > 1 ? 's' : ''} ago`;
+      const weeks = Math.floor(days / 7);
+      return `${weeks} week${weeks > 1 ? 's' : ''} ago`;
+    };
+
+    const load = async () => {
+      if (userRole !== 'provider' && userRole !== 'recipient') return;
+      const { summary } = await fetchAnalyticsSummaryApi(userRole);
+      if (!summary || cancelled) return;
+      setMeals(summary.meals);
+      setPoundsRescued(summary.poundsRescued);
+      setCo2LbsSaved(summary.co2LbsSaved);
+      setStreakDays(summary.streakDays);
+      setMonths(summary.monthLabels.length ? summary.monthLabels : DEFAULT_MONTHS);
+      setBarData(summary.monthRatios.length ? summary.monthRatios : DEFAULT_BAR_DATA);
+      setFirstPickupAgo(formatTimeAgo(summary.firstPickupAt));
+      setEcoWarriorAgo(formatTimeAgo(summary.firstEcoWarriorAt));
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [userRole]);
+
+  const statLabels = useMemo(
+    () => ({
+      mealsTitle: userRole === 'provider' ? 'Meals Shared' : 'Meals',
+      mealsLabel: userRole === 'provider' ? 'Meals completed' : 'Meals received',
+    }),
+    [userRole]
+  );
+
+  const milestones = useMemo(
+    () => [
+      {
+        id: 'first-rescue',
+        title: 'First Rescue',
+        description: 'You claimed your first meal!',
+        timeAgo: firstPickupAgo,
+      },
+      {
+        id: 'eco-warrior',
+        title: 'Eco Warrior',
+        description: 'Saved 10 kg of CO2!',
+        timeAgo: ecoWarriorAgo,
+      },
+    ],
+    [ecoWarriorAgo, firstPickupAgo]
+  );
 
   const headerTop = Platform.select({
     ios: insets.top,
@@ -76,16 +151,16 @@ export default function AnalyticsScreen() {
             <ImpactCard
               variant="stat"
               icon={<HeartTab width={20} height={20} color={palette.timeIcon} />}
-              title="Meals"
-              value="0"
-              label="Meals received"
+              title={statLabels.mealsTitle}
+              value={String(meals)}
+              label={statLabels.mealsLabel}
               accentColor={palette.timeIcon}
             />
             <ImpactCard
               variant="stat"
               icon={<LeafIcon1 width={20} height={20} color={palette.roleBulbColor2} />}
               title="Weight"
-              value="3"
+              value={String(poundsRescued)}
               label="Pounds rescued"
               accentColor={palette.roleBulbColor2}
             />
@@ -93,7 +168,7 @@ export default function AnalyticsScreen() {
               variant="stat"
               icon={<UpwardArrow width={20} height={20} color={palette.logoutColor} />}
               title=" CO2"
-              value="0"
+              value={String(co2LbsSaved)}
               label="Lbs CO2 saved"
               accentColor={palette.logoutColor}
             />
@@ -101,7 +176,7 @@ export default function AnalyticsScreen() {
               variant="stat"
               icon={<BatchIcon width={20} height={20} color={palette.roleBulbColor3} />}
               title="Streak"
-              value="3"
+              value={String(streakDays)}
               label="Day Streak"
               accentColor={palette.roleBulbColor3}
             />
@@ -123,8 +198,8 @@ export default function AnalyticsScreen() {
           </Text>
           <View style={[styles.chartCard, { backgroundColor:colors.inputFieldBg,  }]}>
             <View style={styles.barChart}>
-              {BAR_DATA.map((ratio, i) => (
-                <View key={MONTHS[i]} style={styles.barWrapper}>
+              {barData.map((ratio, i) => (
+                <View key={months[i] ?? `m-${i}`} style={styles.barWrapper}>
                   <View
                     style={[
                       styles.bar,
@@ -138,7 +213,7 @@ export default function AnalyticsScreen() {
               ))}
             </View>
             <View style={styles.barLabels}>
-              {MONTHS.map((label) => (
+              {months.map((label) => (
                 <Text
                   key={label}
                   style={[
@@ -170,7 +245,7 @@ export default function AnalyticsScreen() {
           >
             Milestones
           </Text>
-          {MILESTONES.map((m, index) => {
+          {milestones.map((m, index) => {
             const { iconBg, iconColor } = MILESTONE_PALETTE[index];
             const icon =
               index === 0 ? (

@@ -31,19 +31,32 @@ const LoginScreen = () => {
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [emailError, setEmailError] = useState('')
+  const [passwordError, setPasswordError] = useState('')
+  const [formError, setFormError] = useState('')
   const setAuth = useAuthStore((s) => s.setAuth)
+
+  const safeSignOut = async () => {
+    const { error } = await supabase.auth.signOut()
+    if (!error) return
+    const message = (error.message ?? '').toLowerCase()
+    // Happens when there is no persisted refresh token; treat as already signed out.
+    if (message.includes('refresh token') && message.includes('not found')) return
+    throw error
+  }
 
   const handleSignIn = async () => {
     if (loading) return
-    setError('')
+    setEmailError('')
+    setPasswordError('')
+    setFormError('')
     const trimmedEmail = email.trim()
     if (!trimmedEmail) {
-      setError('Please enter your email.')
+      setEmailError('Please enter your email.')
       return
     }
     if (!password) {
-      setError('Please enter your password.')
+      setPasswordError('Please enter your password.')
       return
     }
     setLoading(true)
@@ -53,12 +66,25 @@ const LoginScreen = () => {
         password,
       })
       if (signInError) {
-        setError(signInError.message ?? 'Sign in failed. Please try again.')
+        setFormError(signInError.message ?? 'Sign in failed. Please try again.')
         return
       }
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         const profile = await fetchProfile(user.id)
+        // Enforce role-specific login flow:
+        // if user enters from provider flow, only provider account can continue
+        // (same rule for recipient flow).
+        if (role && profile?.role && profile.role !== role) {
+          await safeSignOut()
+          setAuth(null, null)
+          setFormError(
+            role === 'provider'
+              ? 'Please Login as Recipient.'
+              : 'Please Login as Provider.'
+          )
+          return
+        }
         // Use profile role from DB; if missing, use role from the path they came from (Provider vs Recipient)
         const resolvedRole = profile?.role ?? role ?? null
         const profileWithRole = profile ? { ...profile, role: resolvedRole } : null
@@ -148,18 +174,59 @@ const LoginScreen = () => {
         <View style={{marginTop:24}}>
 
         
-        <AuthInput type="email" value={email} onChangeText={setEmail} />
+        <AuthInput
+          type="email"
+          value={email}
+          onChangeText={(v) => {
+            setEmail(v)
+            if (emailError) setEmailError('')
+            if (formError) setFormError('')
+          }}
+        />
+        {emailError ? (
+          <Text
+            style={[
+              styles.fieldErrorText,
+              {
+                color: '#dc2626',
+                fontFamily: fontFamilies.inter,
+                fontSize: fonts.subhead,
+              },
+            ]}
+          >
+            {emailError}
+          </Text>
+        ) : null}
 
       
 
         <AuthInput
           type="password"
           value={password}
-          onChangeText={setPassword}
+          onChangeText={(v) => {
+            setPassword(v)
+            if (passwordError) setPasswordError('')
+            if (formError) setFormError('')
+          }}
           showPasswordToggle
+          containerStyle={{ marginBottom: 0 }}
         />
+        {passwordError ? (
+          <Text
+            style={[
+              styles.fieldErrorText,
+              {
+                color: '#dc2626',
+                fontFamily: fontFamilies.inter,
+                fontSize: fonts.subhead,
+              },
+            ]}
+          >
+            {passwordError}
+          </Text>
+        ) : null}
         </View>
-        {error ? (
+        {formError ? (
           <Text
             style={[
               styles.errorText,
@@ -170,11 +237,11 @@ const LoginScreen = () => {
               },
             ]}
           >
-            {error}
+            {formError}
           </Text>
         ) : null}
         <Pressable
-          style={{ marginTop: error ? 4 : -8 }}
+          style={{ marginTop: passwordError ? 2 : 8 }}
           onPress={() => navigation.navigate('ForgotPasswordScreen')}
         >
           <Text style={{ color: colors.primary, fontFamily: fontFamilies.interMedium, fontSize: fonts.caption }}>
@@ -327,7 +394,11 @@ const styles = StyleSheet.create({
     marginTop:20
   },
   errorText: {
-    marginTop: 12,
+    marginTop: 4,
     textAlign: 'center',
+  },
+  fieldErrorText: {
+    marginTop: -14,
+    marginBottom: 10,
   },
 })

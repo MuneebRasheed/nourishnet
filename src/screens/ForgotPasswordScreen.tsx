@@ -144,11 +144,11 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   inputWrap: {
-    marginBottom: 8,
+    // marginBottom: 8,
   },
   errorText: {
-    marginTop: 8,
-    textAlign: 'center',
+    marginTop: -10,
+    // textAlign: 'center',
   },
   buttonWrap: {
     marginTop: 24,
