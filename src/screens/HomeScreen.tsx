@@ -209,7 +209,8 @@ export default function HomeScreen() {
     return list;
   }, [baseList, search, category, appliedFilters]);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
-  const isRequested = useRequestedListingsStore((s) => s.isRequested);
+  const requestedIds = useRequestedListingsStore((s) => s.requestedIds);
+  const isRequested = (id: string) => requestedIds.has(id);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
