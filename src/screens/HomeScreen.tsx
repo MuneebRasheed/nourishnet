@@ -73,7 +73,7 @@ function formatPostedAgo(createdAt: string): string {
 function providerListingToDetailItem(listing: ProviderListing): FoodDetailItem {
   return {
     id: listing.id,
-    image: DEFAULT_LISTING_IMAGE,
+    image: listing.imageUrl ? { uri: listing.imageUrl } : DEFAULT_LISTING_IMAGE,
     title: listing.title,
     source: 'Provider',
     distance: '—',

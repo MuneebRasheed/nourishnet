@@ -186,6 +186,7 @@ const navigation = useNavigation<CompositeNavigationProp<ListingsNav, RootNav>>(
                 timeRangeLabel={`${listing.startTime} - ${listing.endTime}`}
                 address={listing.pickupAddress}
                 foodType={listing.foodType}
+                imageSource={listing.imageUrl ? { uri: listing.imageUrl } : undefined}
                 statusLabel={ACTIVE_LISTING_STATUSES.has(listing.status) ? 'Active' : 'Completed'}
                 statusColor={ACTIVE_LISTING_STATUSES.has(listing.status) ? palette.roleBulbColor2 : colors.textSecondary}
                 onPressViewRequests={() => handleViewRequests(listing)}

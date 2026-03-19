@@ -43,6 +43,21 @@ function mapApiToListing(row: ApiListing): ProviderListing {
   };
 }
 
+async function ensureListingImageUrl(
+  listingId: string,
+  desiredImageUrl?: string | null
+): Promise<ApiListing | null> {
+  if (!desiredImageUrl) return null;
+  const { data, error } = await supabase
+    .from('listings')
+    .update({ image_url: desiredImageUrl })
+    .eq('id', listingId)
+    .select('*')
+    .single();
+  if (error || !data) return null;
+  return data as ApiListing;
+}
+
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const { data: { session: initialSession } } = await supabase.auth.getSession();
 
@@ -86,7 +101,12 @@ export async function createListingApi(draft: ProviderListingDraft): Promise<{ l
   if (!res.ok) {
     return { listing: null, error: data?.error ?? 'Failed to create listing' };
   }
-  const listing = data.listing ? mapApiToListing(data.listing) : null;
+  let apiListing: ApiListing | null = data.listing ?? null;
+  if (apiListing && draft.imageUrl && !apiListing.image_url) {
+    const patched = await ensureListingImageUrl(apiListing.id, draft.imageUrl);
+    if (patched) apiListing = patched;
+  }
+  const listing = apiListing ? mapApiToListing(apiListing) : null;
   return { listing };
 }
 
@@ -187,6 +207,7 @@ type MyRequestRow = {
   start_time: string | null;
   end_time: string | null;
   note: string | null;
+  image_url: string | null;
   listing_status: string;
   listing_created_at: string;
 };
@@ -194,6 +215,7 @@ type MyRequestRow = {
 /** One request with listing data for My Requests screen (id = listing_id for navigation). */
 export type MyRequestItem = {
   id: string;
+  imageUrl?: string | null;
   title: string;
   source: string;
   distance: string;
@@ -217,6 +239,7 @@ function formatPostedAgo(createdAt: string): string {
 function rowToMyRequestItem(row: MyRequestRow): MyRequestItem {
   return {
     id: row.listing_id,
+    imageUrl: row.image_url ?? null,
     title: row.listing_title ?? '',
     source: 'Provider',
     distance: '—',
@@ -287,7 +310,12 @@ export async function updateListingApi(
   if (!res.ok) {
     return { listing: null, error: data?.error ?? 'Failed to update listing' };
   }
-  const listing = data.listing ? mapApiToListing(data.listing) : null;
+  let apiListing: ApiListing | null = data.listing ?? null;
+  if (apiListing && draft.imageUrl && !apiListing.image_url) {
+    const patched = await ensureListingImageUrl(apiListing.id, draft.imageUrl);
+    if (patched) apiListing = patched;
+  }
+  const listing = apiListing ? mapApiToListing(apiListing) : null;
   return { listing };
 }
 

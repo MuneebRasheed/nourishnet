@@ -68,7 +68,7 @@ export default function MyRequestsScreen() {
 
   const toCardItem = (item: MyRequestItem): FoodCardData => ({
     ...item,
-    image: DEFAULT_LISTING_IMAGE,
+    image: item.imageUrl ? { uri: item.imageUrl } : DEFAULT_LISTING_IMAGE,
     isLive: false,
   });
 

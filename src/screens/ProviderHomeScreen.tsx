@@ -51,7 +51,9 @@ export default function ProviderHomeScreen() {
       let cancelled = false;
       (async () => {
         const { listings: fetched, error } = await fetchListingsApi();
+        console.log('fetched', fetched);
         if (!cancelled && !error) setListings(fetched);
+
       })();
       return () => { cancelled = true; };
     }, [setListings])
@@ -289,6 +291,7 @@ export default function ProviderHomeScreen() {
                 timeRangeLabel={`${listing.startTime} - ${listing.endTime}`}
                 address={listing.pickupAddress}
                 foodType={listing.foodType}
+                imageSource={listing.imageUrl ? { uri: listing.imageUrl } : undefined}
                 statusLabel={ACTIVE_LISTING_STATUSES.has(listing.status) ? 'Active' : 'Completed'}
                 onPressViewRequests={handleViewListings}
                 onEdit={() => handleEditListing(listing)}
