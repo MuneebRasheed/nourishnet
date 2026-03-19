@@ -66,15 +66,7 @@ export default function SettingsScreen() {
   };
 
   const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      const message = (error.message ?? '').toLowerCase();
-      // If refresh token is already gone, user is effectively signed out.
-      if (!(message.includes('refresh token') && message.includes('not found'))) {
-        Alert.alert('Logout failed', error.message ?? 'Please try again.');
-        return;
-      }
-    }
+    await supabase.auth.signOut();
     clearAuth();
     navigation.dispatch(
       CommonActions.reset({
@@ -560,10 +552,10 @@ const styles = StyleSheet.create({
     height: Dimensions.get('window').height,
   },
   deactivateModalAndroidOverlay: {
-    backgroundColor: 'rgba(0,0,0,0.9)',
+    backgroundColor: 'rgba(0,0,0,0.7)',
   },
   deactivateModalOverlayBg: {
-    backgroundColor: 'rgba(0,0,0,0.2)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   deactivateModalContent: {
     width: '100%',
