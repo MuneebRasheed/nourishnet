@@ -127,8 +127,7 @@ export default function SettingsScreen() {
           >
             Account
           </Text>
-          <View style={[styles.sectionCard, { backgroundColor: "transparent"
-           }, !isDark && { borderWidth: 1, borderColor: colors.borderColor }]}>
+          <View style={styles.sectionCard}>
             <SettingsRow
               backgroundColor={colors.inputFieldBg}
               iconComponent={<PartnerIcon width={20} height={20} stroke={colors.text} />}
@@ -162,7 +161,7 @@ export default function SettingsScreen() {
           >
             Appearance
           </Text>
-          <View style={[styles.sectionCard, { backgroundColor: "transparent" }, !isDark && { borderWidth: 1, borderColor: colors.borderColor }]}>
+          <View style={styles.sectionCard}>
             <SettingsRow
             backgroundColor={colors.inputFieldBg}
               iconComponent={<Ticon width={20} height={20} color={colors.text} />}
@@ -202,7 +201,7 @@ export default function SettingsScreen() {
             >
               Subscription
             </Text>
-            <View style={[styles.sectionCard, { backgroundColor: "transparent" }, !isDark && { borderWidth: 1, borderColor: colors.borderColor }]}>
+            <View style={styles.sectionCard}>
               <SettingsRow
                 backgroundColor={colors.inputFieldBg}
                 iconComponent={<KingIcon width={20} height={20} color={colors.text} />}
@@ -223,7 +222,7 @@ export default function SettingsScreen() {
           >
             Other Setting
           </Text>
-          <View style={[styles.sectionCard, { backgroundColor: "transparent" }, !isDark && { borderWidth: 1, borderColor: colors.borderColor }]}>
+          <View style={styles.sectionCard}>
             <SettingsRow
               backgroundColor={colors.inputFieldBg}
               icon="document-text-outline"
@@ -488,7 +487,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
-    elevation: 2,
+    ...(Platform.OS === 'android' ? { elevation: 0 } : { elevation: 2 }),
   },
   aboutCard: {
     borderRadius: 21,
@@ -515,7 +514,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
-    elevation: 2,
+    ...(Platform.OS === 'android' ? { elevation: 0 } : { elevation: 2 }),
     paddingVertical:16,
   },
   aboutVersionWrap:{gap:6,alignItems:'center'},
