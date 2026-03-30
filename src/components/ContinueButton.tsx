@@ -25,6 +25,7 @@ interface CustomButtonProps {
   // ✅ New props
   icon?: React.ReactNode;
   iconPosition?: 'left' | 'right';
+  disabled?: boolean;
 }
 
 const ContinueButton: React.FC<CustomButtonProps> = ({
@@ -39,6 +40,7 @@ const ContinueButton: React.FC<CustomButtonProps> = ({
   textColor,
   icon,
   iconPosition = 'left',
+  disabled = false,
 }) => {
   const colors = getColors(isDark);
   const fontSizes = useAppFontSizes();
@@ -52,12 +54,13 @@ const ContinueButton: React.FC<CustomButtonProps> = ({
     <TouchableOpacity
       style={[
         styles.button,
-        { backgroundColor: resolvedBackgroundColor },
+        { backgroundColor: resolvedBackgroundColor, opacity: disabled ? 0.55 : 1 },
         borderStyle,
         style,
       ]}
       activeOpacity={activeOpacity}
       onPress={onPress}
+      disabled={disabled}
     >
       <View style={styles.content}>
         {icon && iconPosition === 'left' && (

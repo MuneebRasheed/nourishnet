@@ -1,5 +1,6 @@
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native'
-import React, { useState } from 'react'
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Platform } from 'react-native'
+import React, { useEffect, useState } from 'react'
+import * as AppleAuthentication from 'expo-apple-authentication'
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
 import { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -17,6 +18,9 @@ import { RootStackParamList } from '../navigations/RootNavigation'
 import { supabase } from '../lib/supabase'
 import { API_BASE_URL } from '../lib/api/client'
 import { markOnboardingComplete } from '../lib/onboardingStorage'
+import { useAuthStore } from '../../store/authStore'
+import { completeAuthAndGoToMainTabs } from '../lib/authSession'
+import { signInWithApple, signInWithGoogle } from '../lib/oauth'
 
 const SignupScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
@@ -36,6 +40,23 @@ const SignupScreen = () => {
   const [passwordError, setPasswordError] = useState('')
   const [confirmPasswordError, setConfirmPasswordError] = useState('')
   const [formError, setFormError] = useState('')
+  const [oauthLoading, setOauthLoading] = useState<'google' | 'apple' | null>(null)
+  const [appleAuthAvailable, setAppleAuthAvailable] = useState(false)
+  const setAuth = useAuthStore((s) => s.setAuth)
+
+  useEffect(() => {
+    let cancelled = false
+    if (Platform.OS !== 'ios') {
+      setAppleAuthAvailable(false)
+      return
+    }
+    AppleAuthentication.isAvailableAsync().then((v) => {
+      if (!cancelled) setAppleAuthAvailable(v)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const handleSignUp = async () => {
     if (loading) return
@@ -90,6 +111,27 @@ const SignupScreen = () => {
       })
     } finally {
       setLoading(false)
+    }
+  }
+
+  const runOAuth = async (provider: 'google' | 'apple') => {
+    if (oauthLoading) return
+    setFormError('')
+    setOauthLoading(provider)
+    try {
+      const { data, error } =
+        provider === 'google' ? await signInWithGoogle() : await signInWithApple()
+      if (error) {
+        setFormError(error.message ?? 'Sign up failed. Please try again.')
+        return
+      }
+      if (!data) return
+      const result = await completeAuthAndGoToMainTabs(navigation, role, setAuth)
+      if (result.ok === false) {
+        setFormError(result.message)
+      }
+    } finally {
+      setOauthLoading(null)
     }
   }
 
@@ -235,23 +277,27 @@ const SignupScreen = () => {
 
           <View style={styles.socialRow}>
             <ContinueButton
-              label=" Google"
-              onPress={() => {}}
+              label={oauthLoading === 'google' ? 'Signing in…' : ' Google'}
+              onPress={() => runOAuth('google')}
               icon={<GoogleIcon width={18} height={18} />}
               backgroundColor={colors.background}
               borderColor={colors.borderColor}
               textColor={colors.text}
               style={styles.socialBtn}
+              disabled={!!oauthLoading}
             />
-            <ContinueButton
-              label="  Apple"
-              onPress={() => {}}
-              icon={<AppleIcon width={18} height={18} color={colors.text} />}
-              backgroundColor={colors.background}
-              borderColor={colors.borderColor}
-              textColor={colors.text}
-              style={styles.socialBtn}
-            />
+            {Platform.OS === 'ios' && appleAuthAvailable ? (
+              <ContinueButton
+                label={oauthLoading === 'apple' ? 'Signing in…' : '  Apple'}
+                onPress={() => runOAuth('apple')}
+                icon={<AppleIcon width={18} height={18} color={colors.text} />}
+                backgroundColor={colors.background}
+                borderColor={colors.borderColor}
+                textColor={colors.text}
+                style={styles.socialBtn}
+                disabled={!!oauthLoading}
+              />
+            ) : null}
           </View>
 
           <View style={styles.footerRow}>

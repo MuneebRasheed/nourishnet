@@ -1,5 +1,6 @@
-import { StyleSheet, Text, View, TouchableOpacity, Pressable } from 'react-native'
-import React, { useState } from 'react'
+import { StyleSheet, Text, View, TouchableOpacity, Pressable, Platform } from 'react-native'
+import React, { useEffect, useState } from 'react'
+import * as AppleAuthentication from 'expo-apple-authentication'
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
 import { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useThemeStore } from '../../store/themeStore'
@@ -15,8 +16,8 @@ import AppleIcon from '../assets/svgs/AppleIcon'
 import { RootStackParamList } from '../navigations/RootNavigation'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../../store/authStore'
-import { fetchProfile } from '../lib/profile'
-import { markOnboardingComplete } from '../lib/onboardingStorage'
+import { completeAuthAndGoToMainTabs } from '../lib/authSession'
+import { signInWithApple, signInWithGoogle } from '../lib/oauth'
 
 const LoginScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
@@ -32,19 +33,26 @@ const LoginScreen = () => {
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [oauthLoading, setOauthLoading] = useState<'google' | 'apple' | null>(null)
+  const [appleAuthAvailable, setAppleAuthAvailable] = useState(false)
   const [emailError, setEmailError] = useState('')
   const [passwordError, setPasswordError] = useState('')
   const [formError, setFormError] = useState('')
   const setAuth = useAuthStore((s) => s.setAuth)
 
-  const safeSignOut = async () => {
-    const { error } = await supabase.auth.signOut()
-    if (!error) return
-    const message = (error.message ?? '').toLowerCase()
-    // Happens when there is no persisted refresh token; treat as already signed out.
-    if (message.includes('refresh token') && message.includes('not found')) return
-    throw error
-  }
+  useEffect(() => {
+    let cancelled = false
+    if (Platform.OS !== 'ios') {
+      setAppleAuthAvailable(false)
+      return
+    }
+    AppleAuthentication.isAvailableAsync().then((v) => {
+      if (!cancelled) setAppleAuthAvailable(v)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const handleSignIn = async () => {
     if (loading) return
@@ -70,32 +78,33 @@ const LoginScreen = () => {
         setFormError(signInError.message ?? 'Sign in failed. Please try again.')
         return
       }
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const profile = await fetchProfile(user.id)
-        // Enforce role-specific login flow:
-        // if user enters from provider flow, only provider account can continue
-        // (same rule for recipient flow).
-        if (role && profile?.role && profile.role !== role) {
-          await safeSignOut()
-          setAuth(null, null)
-          setFormError(
-            role === 'provider'
-              ? 'Please Login as Recipient.'
-              : 'Please Login as Provider.'
-          )
-          return
-        }
-        // Use profile role from DB; if missing, use role from the path they came from (Provider vs Recipient)
-        const resolvedRole = profile?.role ?? role ?? null
-        const profileWithRole = profile ? { ...profile, role: resolvedRole } : null
-        setAuth(resolvedRole, profileWithRole)
-        await markOnboardingComplete()
-        // Navigate on next tick so MainTabNavigator reads updated auth store and shows correct tabs (provider 4 tabs / recipient 5 tabs).
-        setTimeout(() => navigation.replace('MainTabs'), 0)
+      const result = await completeAuthAndGoToMainTabs(navigation, role, setAuth)
+      if (result.ok === false) {
+        setFormError(result.message)
       }
     } finally {
       setLoading(false)
+    }
+  }
+
+  const runOAuth = async (provider: 'google' | 'apple') => {
+    if (oauthLoading) return
+    setFormError('')
+    setOauthLoading(provider)
+    try {
+      const { data, error } =
+        provider === 'google' ? await signInWithGoogle() : await signInWithApple()
+      if (error) {
+        setFormError(error.message ?? 'Sign in failed. Please try again.')
+        return
+      }
+      if (!data) return
+      const result = await completeAuthAndGoToMainTabs(navigation, role, setAuth)
+      if (result.ok === false) {
+        setFormError(result.message)
+      }
+    } finally {
+      setOauthLoading(null)
     }
   }
 
@@ -267,25 +276,25 @@ const LoginScreen = () => {
 
         <View style={styles.socialRow}>
           <ContinueButton
-            label=" Google"
-            onPress={() => {}}
+            label={oauthLoading === 'google' ? 'Signing in…' : ' Google'}
+            onPress={() => runOAuth('google')}
             icon={<GoogleIcon width={18} height={18}  />}
             backgroundColor={colors.inputFieldBg}
-            
             textColor={colors.text}
             style={styles.socialBtn}
-              
-            
+            disabled={!!oauthLoading}
           />
-          <ContinueButton
-            label="  Apple"
-            onPress={() => {}}
-            icon={<AppleIcon width={18} height={18} color={colors.text} />}
-            backgroundColor={colors.inputFieldBg}
-            
-            textColor={colors.text}
-             style={styles.socialBtn}
-          />
+          {Platform.OS === 'ios' && appleAuthAvailable ? (
+            <ContinueButton
+              label={oauthLoading === 'apple' ? 'Signing in…' : '  Apple'}
+              onPress={() => runOAuth('apple')}
+              icon={<AppleIcon width={18} height={18} color={colors.text} />}
+              backgroundColor={colors.inputFieldBg}
+              textColor={colors.text}
+              style={styles.socialBtn}
+              disabled={!!oauthLoading}
+            />
+          ) : null}
         </View>
 
         <View style={styles.footerRow}>
