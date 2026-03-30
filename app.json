@@ -4,7 +4,7 @@
     "slug": "NourishNet",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./src/assets/images/Icon.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -14,21 +14,31 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.NourishNet"
+      "bundleIdentifier": "com.anonymous.NourishNet",
+      "icon": "./src/assets/images/Icon.png"
     },
     "android": {
+      "icon": "./src/assets/images/Icon.png",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./src/assets/images/Icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.anonymous.NourishNet"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-font",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "NourishNet needs access to your photo library so you can choose a profile or listing image.",
+          "cameraPermission": "NourishNet can use the camera if you take a new photo for your profile or listing."
+        }
+      ]
     ]
   }
 }
