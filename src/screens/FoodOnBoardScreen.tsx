@@ -50,6 +50,7 @@ export default function FoodOnBoardScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const route = useRoute<RouteProp<RootStackParamList, 'FoodOnBoardScreen'>>()
   const role = route.params?.role ?? 'provider'
+  const intent = route.params?.intent ?? 'login'
   const theme = useThemeStore((s) => s.theme)
   const isDark = theme === 'dark'
   const colors = getColors(isDark)
@@ -62,7 +63,7 @@ export default function FoodOnBoardScreen() {
 
   const onContinue = () => {
     if (isLast) {
-      navigation.navigate('LoginScreen', { role })
+      navigation.navigate(intent === 'signup' ? 'SignupScreen' : 'LoginScreen', { role })
     } else {
       const next = index + 1
       listRef.current?.scrollToIndex({ index: next, animated: true })

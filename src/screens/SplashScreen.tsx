@@ -12,6 +12,7 @@ import { RootStackParamList } from '../navigations/RootNavigation';
 import SplashIcon from '../assets/svgs/SplashIcon';
 import { supabase } from '../lib/supabase';
 import { fetchProfile } from '../lib/profile';
+import { hasCompletedOnboarding } from '../lib/onboardingStorage';
 
 /** Delay so persisted auth has time to rehydrate from AsyncStorage. */
 const REHYDRATE_DELAY_MS = 800;
@@ -19,8 +20,9 @@ const REHYDRATE_DELAY_MS = 800;
 /**
  * Flow: Splash → check Supabase session →
  *   If session: load profile, set in Zustand, → MainTabs (dashboard).
- *   Else: OnBoardingScreen → SelectRole → Login/Signup → MainTabs.
+ *   Else: first install → OnBoardingScreen (then role flow → login). Returning user → LoginScreen only.
  * User stays logged in until logout or delete account (session persisted in AsyncStorage).
+ * Onboarding is shown once per install until the user signs in or completes signup (see onboardingStorage).
  */
 const SplashScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -48,7 +50,9 @@ const SplashScreen = () => {
         navigation.replace('MainTabs');
       } else {
         setAuth(null, null);
-        navigation.replace('OnBoardingScreen');
+        const done = await hasCompletedOnboarding();
+        if (cancelled) return;
+        navigation.replace(done ? 'LoginScreen' : 'OnBoardingScreen');
       }
     };
     run();

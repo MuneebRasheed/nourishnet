@@ -16,6 +16,7 @@ import { RootStackParamList } from '../navigations/RootNavigation'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../../store/authStore'
 import { fetchProfile } from '../lib/profile'
+import { markOnboardingComplete } from '../lib/onboardingStorage'
 
 const LoginScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
@@ -89,9 +90,10 @@ const LoginScreen = () => {
         const resolvedRole = profile?.role ?? role ?? null
         const profileWithRole = profile ? { ...profile, role: resolvedRole } : null
         setAuth(resolvedRole, profileWithRole)
+        await markOnboardingComplete()
+        // Navigate on next tick so MainTabNavigator reads updated auth store and shows correct tabs (provider 4 tabs / recipient 5 tabs).
+        setTimeout(() => navigation.replace('MainTabs'), 0)
       }
-      // Navigate on next tick so MainTabNavigator reads updated auth store and shows correct tabs (provider 4 tabs / recipient 5 tabs).
-      setTimeout(() => navigation.replace('MainTabs'), 0)
     } finally {
       setLoading(false)
     }
@@ -295,7 +297,11 @@ const LoginScreen = () => {
             Don’t have an account?
           </Text>
           <TouchableOpacity
-            onPress={() => navigation.navigate('SignupScreen', role ? { role } : undefined)}
+            onPress={() =>
+              role
+                ? navigation.navigate('SignupScreen', { role })
+                : navigation.navigate('SelectRoleScreen', { intent: 'signup' })
+            }
             activeOpacity={0.8}
           >
             <Text style={{ 

@@ -29,6 +29,7 @@ import TermsAndConditionsScreen from '../screens/TermsAndConditionsScreen';
 import PrivacyPolicyScreen from '../screens/PrivacyPolicyScreen';
 
 export type AuthRole = 'provider' | 'recipient';
+export type AuthIntent = 'login' | 'signup';
 
 /** Root stack route names and params. Use this type for useNavigation<> in screens. */
 export type RootStackParamList = {
@@ -41,13 +42,13 @@ export type RootStackParamList = {
   EditProfileScreen: { email?: string; otp?: string };
   ProviderProfileScreen: { email?: string; otp?: string };
   CreateNewPasswordScreen: { email: string; otp: string };
-  SelectRoleScreen: undefined;
-  ReceiptOnBoardScreen: { role?: AuthRole } | undefined;
+  SelectRoleScreen: { intent?: AuthIntent } | undefined;
+  ReceiptOnBoardScreen: { role?: AuthRole; intent?: AuthIntent } | undefined;
   ThemeFontTestScreen: undefined;
   ThemeScreen: undefined;
   NotificationsScreen: undefined;
   NotificationSettingsScreen: undefined;
-  FoodOnBoardScreen: { role?: AuthRole } | undefined;
+  FoodOnBoardScreen: { role?: AuthRole; intent?: AuthIntent } | undefined;
   FoodDetailScreen: { item: FoodDetailItem };
   PostFoodScreen: { editListing?: ProviderListing } | undefined;
   PostPublishScreen: { draft: PostFoodDraft; editListing?: ProviderListing } | undefined;

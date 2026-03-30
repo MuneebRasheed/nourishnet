@@ -41,6 +41,7 @@ export default function ReceiptOnBoardScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const route = useRoute<RouteProp<RootStackParamList, 'ReceiptOnBoardScreen'>>()
   const role = route.params?.role ?? 'recipient'
+  const intent = route.params?.intent ?? 'login'
   const theme = useThemeStore((s) => s.theme)
   const isDark = theme === 'dark'
   const colors = getColors(isDark)
@@ -53,7 +54,7 @@ export default function ReceiptOnBoardScreen() {
 
   const onContinue = () => {
     if (isLast) {
-      navigation.navigate('LoginScreen', { role })
+      navigation.navigate(intent === 'signup' ? 'SignupScreen' : 'LoginScreen', { role })
     } else {
       const next = index + 1
       listRef.current?.scrollToIndex({ index: next, animated: true })

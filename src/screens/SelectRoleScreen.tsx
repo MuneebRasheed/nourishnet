@@ -12,9 +12,12 @@ import RoleCard from '../components/RoleCard'
 import { RootStackParamList } from '../navigations/RootNavigation'
 import { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useNavigation } from '@react-navigation/native'
+import { useRoute, RouteProp } from '@react-navigation/native'
 
 const SelectRoleScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const route = useRoute<RouteProp<RootStackParamList, 'SelectRoleScreen'>>()
+  const intent = route.params?.intent ?? 'login'
   const theme = useThemeStore((s) => s.theme)
   const isDark = theme === 'dark'
   const colors = getColors(isDark)
@@ -22,11 +25,11 @@ const SelectRoleScreen = () => {
   const insets = useSafeAreaInsets()
 
   const handleFoodProvider = () => {
-    navigation.navigate('FoodOnBoardScreen', { role: 'provider' })
+    navigation.navigate('FoodOnBoardScreen', { role: 'provider', intent })
   }
 
   const handleFoodRecipient = () => {
-    navigation.navigate('ReceiptOnBoardScreen', { role: 'recipient' })
+    navigation.navigate('ReceiptOnBoardScreen', { role: 'recipient', intent })
   }
 
   return (

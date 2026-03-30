@@ -16,6 +16,7 @@ import AppleIcon from '../assets/svgs/AppleIcon'
 import { RootStackParamList } from '../navigations/RootNavigation'
 import { supabase } from '../lib/supabase'
 import { API_BASE_URL } from '../lib/api/client'
+import { markOnboardingComplete } from '../lib/onboardingStorage'
 
 const SignupScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
@@ -80,6 +81,7 @@ const SignupScreen = () => {
         setFormError(body.error)
         return
       }
+      await markOnboardingComplete()
       navigation.navigate('VerificationCodeScreen', {
         email: trimmedEmail,
         context: 'signup',
@@ -264,7 +266,9 @@ const SignupScreen = () => {
             </Text>
             <TouchableOpacity
               onPress={() =>
-                navigation.navigate('LoginScreen', role ? { role } : undefined)
+                role
+                  ? navigation.navigate('LoginScreen', { role })
+                  : navigation.navigate('LoginScreen')
               }
               activeOpacity={0.8}
             >
