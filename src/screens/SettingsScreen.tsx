@@ -14,13 +14,14 @@ import {
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation, CommonActions } from '@react-navigation/native';
+import { useNavigation, CommonActions, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { supabase } from '../lib/supabase';
-import { getDisplayName, getAvatarLetter } from '../lib/profile';
+import { getDisplayName, getAvatarLetter, avatarUriWithCacheBust } from '../lib/profile';
 import { useThemeStore, useResolvedIsDark } from '../../store/themeStore';
 import { useSettingsStore } from '../../store/settingStore';
-import { useAuthStore } from '../../store/authStore';
+import { useAuthStore, isProviderSession } from '../../store/authStore';
+import { fetchProfile } from '../lib/profile';
 import { getColors, palette } from '../../utils/colors';
 import { useAppFontSizes } from '../../theme/fonts';
 import { fontFamilies } from '../../theme/typography';
@@ -33,6 +34,7 @@ import ContinueButton from '../components/ContinueButton';
 import Logout from '../assets/svgs/Logout';
 import SplashIcon from '../assets/svgs/SplashIcon';
 import PartnerIcon from '../assets/svgs/PartnerIcon';
+import ProfileFood from '../assets/svgs/ProfileFood';
 import BellIcon from '../assets/svgs/BellIcon';
 import PrivacyIcon from '../assets/svgs/PrivacyIcon';
 import LockIcon from '../assets/svgs/LockIcon';
@@ -52,11 +54,29 @@ export default function SettingsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const userRole = useAuthStore((s) => s.userRole);
   const profile = useAuthStore((s) => s.profile);
+  const setAuth = useAuthStore((s) => s.setAuth);
   const clearAuth = useAuthStore((s) => s.clearAuth);
   const largeFont = useSettingsStore((s) => s.largeFont);
   const setLargeFont = useSettingsStore((s) => s.setLargeFont);
-  const isProvider = userRole === 'provider';
+  const isProvider = isProviderSession(userRole, profile);
+  const settingsAvatarUri = avatarUriWithCacheBust(profile?.avatar_url, profile?.updated_at);
   const [streakText, setStreakText] = useState('0-day streak');
+
+  useFocusEffect(
+    React.useCallback(() => {
+      let cancelled = false;
+      (async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user || cancelled) return;
+        const p = await fetchProfile(user.id);
+        if (!p || cancelled) return;
+        setAuth(p.role, p);
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [setAuth])
+  );
 
   const headerTop = Platform.select({
     ios: insets.top,
@@ -66,6 +86,13 @@ export default function SettingsScreen() {
 
   const handleEditProfile = () => {
     navigation.navigate('EditProfileScreen', {});
+  };
+
+  const handleEditBusinessProfile = () => {
+    navigation.navigate('ProviderProfileScreen', {
+      source: 'settings',
+      email: profile?.email ?? undefined,
+    });
   };
 
   const handleLogout = async () => {
@@ -168,14 +195,15 @@ export default function SettingsScreen() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (userRole !== 'provider' && userRole !== 'recipient') return;
-      const { streakText: text } = await fetchStreakTextApi(userRole);
+      const streakRole = userRole ?? profile?.role;
+      if (streakRole !== 'provider' && streakRole !== 'recipient') return;
+      const { streakText: text } = await fetchStreakTextApi(streakRole);
       if (!cancelled) setStreakText(text);
     })();
     return () => {
       cancelled = true;
     };
-  }, [userRole]);
+  }, [userRole, profile?.role]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background, flex: 1 }]}>
@@ -198,7 +226,7 @@ export default function SettingsScreen() {
           displayName={getDisplayName(profile) || 'User'}
           subtitle={streakText}
           avatarLetter={getAvatarLetter(profile)}
-          avatarSource={profile?.avatar_url ? { uri: profile.avatar_url } : undefined}
+          avatarSource={settingsAvatarUri ? { uri: settingsAvatarUri } : undefined}
           onEditPress={handleEditProfile}
           showPremium={isProvider}
         />
@@ -213,13 +241,24 @@ export default function SettingsScreen() {
             Account
           </Text>
           <View style={styles.sectionCard}>
-            <SettingsRow
-              backgroundColor={colors.inputFieldBg}
-              iconComponent={<PartnerIcon width={20} height={20} stroke={colors.text} />}
-              label="Edit Profile"
-              onPress={handleEditProfile}
-              isLast={false}
-            />
+            {!isProvider && (
+              <SettingsRow
+                backgroundColor={colors.inputFieldBg}
+                iconComponent={<PartnerIcon width={20} height={20} stroke={colors.text} />}
+                label="Edit Profile"
+                onPress={handleEditProfile}
+                isLast={false}
+              />
+            )}
+            {isProvider && (
+              <SettingsRow
+                backgroundColor={colors.inputFieldBg}
+                iconComponent={<ProfileFood width={20} height={20} color={colors.text} />}
+                label="Edit Business Profile"
+                onPress={handleEditBusinessProfile}
+                isLast={false}
+              />
+            )}
             <SettingsRow
               backgroundColor={colors.inputFieldBg}
               iconComponent={<BellIcon width={20} height={20} stroke={colors.text} />}

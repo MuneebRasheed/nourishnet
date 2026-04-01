@@ -2,7 +2,7 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, StyleSheet, Platform } from 'react-native';
 import { useThemeStore } from '../../store/themeStore';
-import { useAuthStore } from '../../store/authStore';
+import { useAuthStore, isProviderSession } from '../../store/authStore';
 import { getColors, palette } from '../../utils/colors';
 import HomeScreen from '../screens/HomeScreen';
 import ProviderHomeScreen from '../screens/ProviderHomeScreen';
@@ -41,11 +41,13 @@ const TAB_ICON_SIZE = 24;
 function MainTabNavigator() {
   const theme = useThemeStore((s) => s.theme);
   const userRole = useAuthStore((s) => s.userRole);
+  const profile = useAuthStore((s) => s.profile);
   const isDark = theme === 'dark';
   const colors = getColors(isDark);
   const inactiveGreen = 'rgba(82, 151, 109, 0.6)';
   const iconColor = (focused: boolean) => (focused ? palette.white : inactiveGreen);
-  const HomeComponent = userRole === 'provider' ? ProviderHomeScreen : HomeScreen;
+  const isProvider = isProviderSession(userRole, profile);
+  const HomeComponent = isProvider ? ProviderHomeScreen : HomeScreen;
 
   const renderTabIcon = (IconComponent: React.ComponentType<{ width?: number; height?: number; color?: string }>, focused: boolean) => (
     <View style={[styles.iconWrap, focused && { backgroundColor: colors.primary }]}>
@@ -55,7 +57,6 @@ function MainTabNavigator() {
 
   // Provider flow: Home (ProviderHomeScreen), Listings, Analytics, Settings (4 tabs).
   // Recipient flow: Home (HomeScreen), Favorites, Search, Analytics, Settings (5 tabs).
-  const isProvider = userRole === 'provider';
 
   return (
     <Tab.Navigator

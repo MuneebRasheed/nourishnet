@@ -29,9 +29,9 @@ const LoginScreen = () => {
   const fonts = useAppFontSizes()
 
   const [mode, setMode] = useState<'email' | 'phone'>('email')
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState('test12@gmail.com')
   const [phone, setPhone] = useState('')
-  const [password, setPassword] = useState('')
+  const [password, setPassword] = useState('Muneeb123@')
   const [loading, setLoading] = useState(false)
   const [oauthLoading, setOauthLoading] = useState<'google' | 'apple' | null>(null)
   const [appleAuthAvailable, setAppleAuthAvailable] = useState(false)
@@ -78,7 +78,9 @@ const LoginScreen = () => {
         setFormError(signInError.message ?? 'Sign in failed. Please try again.')
         return
       }
-      const result = await completeAuthAndGoToMainTabs(navigation, role, setAuth)
+      const result = await completeAuthAndGoToMainTabs(navigation, role, setAuth, {
+        flow: 'login',
+      })
       if (result.ok === false) {
         setFormError(result.message)
       }
@@ -99,7 +101,9 @@ const LoginScreen = () => {
         return
       }
       if (!data) return
-      const result = await completeAuthAndGoToMainTabs(navigation, role, setAuth)
+      const result = await completeAuthAndGoToMainTabs(navigation, role, setAuth, {
+        flow: 'login',
+      })
       if (result.ok === false) {
         setFormError(result.message)
       }

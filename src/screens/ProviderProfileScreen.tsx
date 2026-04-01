@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { StyleSheet, Text, View, ScrollView } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useThemeStore } from '../../store/themeStore'
@@ -37,7 +37,8 @@ export default function ProviderProfileScreen() {
   const insets = useSafeAreaInsets()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const route = useRoute<RouteProp<RootStackParamList, 'ProviderProfileScreen'>>()
-  const { email: emailFromRoute = '' } = route.params ?? {}
+  const { email: emailFromRoute = '', source = 'onboarding' } = route.params ?? {}
+  const isSettings = source === 'settings'
 
   const [businessName, setBusinessName] = useState('')
   const [businessAddress, setBusinessAddress] = useState('')
@@ -48,9 +49,38 @@ export default function ProviderProfileScreen() {
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [displayEmail, setDisplayEmail] = useState(emailFromRoute)
   const phoneInputRef = useRef<PhoneInput>(null)
 
   const setProfile = useAuthStore((s) => s.setProfile)
+  const profile = useAuthStore((s) => s.profile)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const p = useAuthStore.getState().profile
+      if (isSettings && p) {
+        if (p.business_name) setBusinessName(p.business_name)
+        if (p.business_address) setBusinessAddress(p.business_address)
+        if (p.phone) {
+          setPhoneFormatted(p.phone)
+          setPhone(p.phone)
+        }
+        if (p.categories?.length) setSelectedCategories([...p.categories])
+        if (p.avatar_url) setProfileImageUri(p.avatar_url)
+      }
+      const { data: { user } } = await supabase.auth.getUser()
+      const email =
+        emailFromRoute ||
+        (isSettings ? p?.email : null) ||
+        user?.email ||
+        ''
+      if (!cancelled && email) setDisplayEmail(email)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [isSettings, emailFromRoute])
 
   const handleUploadPhoto = async () => {
     const result = await pickImage()
@@ -82,21 +112,25 @@ export default function ProviderProfileScreen() {
         setError('You must be signed in to complete your profile.')
         return
       }
-      let avatarUrl: string | null = null
+      const prev = useAuthStore.getState().profile
+      let avatarUrl: string | null = prev?.avatar_url ?? null
       if (profileImageBase64) {
-        avatarUrl = await uploadAvatar(user.id, profileImageBase64)
+        const uploaded = await uploadAvatar(user.id, profileImageBase64)
+        if (uploaded) avatarUrl = uploaded
       }
+      const emailSaved = displayEmail.trim() || emailFromRoute || user.email || ''
+      const updatedAt = new Date().toISOString()
       const { error: updateError } = await supabase
         .from('profiles')
         .update({
           role: 'provider',
-          email: emailFromRoute || user.email,
+          email: emailSaved,
           business_name: businessName.trim(),
           business_address: businessAddress.trim(),
           phone: phoneFormatted.trim() || phone.trim(),
           categories: selectedCategories,
           avatar_url: avatarUrl,
-          updated_at: new Date().toISOString(),
+          updated_at: updatedAt,
         })
         .eq('id', user.id)
       if (updateError) {
@@ -106,16 +140,22 @@ export default function ProviderProfileScreen() {
       setProfile({
         id: user.id,
         role: 'provider',
-        email: (emailFromRoute || user.email) ?? null,
-        full_name: null,
+        email: emailSaved || null,
+        full_name: prev?.full_name ?? null,
         avatar_url: avatarUrl,
-        address: null,
+        address: prev?.address ?? null,
         phone: phoneFormatted.trim() || phone.trim() || null,
         business_name: businessName.trim(),
         business_address: businessAddress.trim(),
         categories: selectedCategories,
+        created_at: prev?.created_at,
+        updated_at: updatedAt,
       })
-      navigation.replace('MainTabs')
+      if (isSettings) {
+        navigation.goBack()
+      } else {
+        navigation.replace('MainTabs')
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.')
     } finally {
@@ -150,7 +190,7 @@ export default function ProviderProfileScreen() {
                 },
               ]}
             >
-              Complete Your Profile
+              {isSettings ? 'Edit Business Profile' : 'Complete Your Profile'}
             </Text>
             <Text
               style={[
@@ -163,12 +203,15 @@ export default function ProviderProfileScreen() {
                 },
               ]}
             >
-              Help recipients find and trust your offerings
+              {isSettings
+                ? 'Update how recipients see your business on NourishNet'
+                : 'Help recipients find and trust your offerings'}
             </Text>
           </View>
 
           <ProfilePictureUploader
             imageUri={profileImageUri}
+            imageCacheKey={profile?.updated_at}
             onPress={handleUploadPhoto}
             PlaceholderIcon={ProfileFood}
           />
@@ -185,7 +228,7 @@ export default function ProviderProfileScreen() {
               type="email"
               label="Email Address"
               placeholder="your@email.com"
-              value={emailFromRoute}
+              value={displayEmail}
               placeholderTextColor={colors.requestBtnBg}
               inputFieldBg={isDark ? colors.requestBtnBg : colors.requestBtnBg}
               editable={false}
@@ -295,7 +338,7 @@ export default function ProviderProfileScreen() {
           ) : null}
           <View style={styles.buttonWrap}>
             <ContinueButton
-              label={submitting ? 'Saving...' : 'Complete Profile'}
+              label={submitting ? 'Saving...' : isSettings ? 'Save changes' : 'Complete Profile'}
               onPress={handleCompleteProfile}
               isDark={isDark}
             />

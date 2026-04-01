@@ -22,7 +22,7 @@ import CategoryChips from '../components/CategoryChips';
 import FoodCard, { FoodCardData } from '../components/FoodCard';
 import BoxIcon from '../assets/svgs/BoxIcon';
 import type { FoodDetailItem } from './FoodDetailScreen';
-import { getAvatarLetter, getDisplayName } from '../lib/profile';
+import { getAvatarLetter, getDisplayName, avatarUriWithCacheBust } from '../lib/profile';
 import { fetchStreakTextApi } from '../lib/api/analytics';
 
 const DEFAULT_LISTING_IMAGE = require('../assets/images/FoodOnboard1.png');
@@ -103,6 +103,7 @@ export default function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const profile = useAuthStore((s) => s.profile);
   const userRole = useAuthStore((s) => s.userRole);
+  const homeHeaderAvatarUri = avatarUriWithCacheBust(profile?.avatar_url, profile?.updated_at);
   const [browseListings, setBrowseListings] = useState<ProviderListing[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -251,7 +252,7 @@ export default function HomeScreen() {
           <HomeHeader
             userName={getDisplayName(profile)}
             avatarLetter={getAvatarLetter(profile)}
-            avatarSource={profile?.avatar_url ? { uri: profile.avatar_url } : undefined}
+            avatarSource={homeHeaderAvatarUri ? { uri: homeHeaderAvatarUri } : undefined}
             streakText={streakText}
           />
           <View style={styles.searchSection}>

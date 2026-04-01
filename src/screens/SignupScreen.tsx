@@ -84,7 +84,7 @@ const SignupScreen = () => {
 
     setLoading(true)
     try {
-      const { error: signUpError } = await supabase.auth.signUp({
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: trimmedEmail,
         password,
       })
@@ -92,6 +92,26 @@ const SignupScreen = () => {
         setFormError(signUpError.message ?? 'Sign up failed. Please try again.')
         return
       }
+
+      if (role === 'recipient') {
+        if (!signUpData?.session) {
+          const { error: signInError } = await supabase.auth.signInWithPassword({
+            email: trimmedEmail,
+            password,
+          })
+          if (signInError) {
+            setFormError(
+              signInError.message ??
+                'Account created but sign-in failed. In Supabase Auth, disable “Confirm email” for signups, or use the verification email link, then log in.'
+            )
+            return
+          }
+        }
+        await markOnboardingComplete()
+        navigation.replace('EditProfileScreen', { email: trimmedEmail })
+        return
+      }
+
       const res = await fetch(`${API_BASE_URL}/auth/send-signup-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -126,7 +146,9 @@ const SignupScreen = () => {
         return
       }
       if (!data) return
-      const result = await completeAuthAndGoToMainTabs(navigation, role, setAuth)
+      const result = await completeAuthAndGoToMainTabs(navigation, role, setAuth, {
+        flow: 'signup',
+      })
       if (result.ok === false) {
         setFormError(result.message)
       }

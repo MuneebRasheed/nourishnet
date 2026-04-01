@@ -40,7 +40,7 @@ export type RootStackParamList = {
   SignupScreen: { role?: AuthRole } | undefined;
   VerificationCodeScreen: { email?: string; role?: AuthRole; context?: 'signup' | 'forgot-password'; password?: string };
   EditProfileScreen: { email?: string; otp?: string };
-  ProviderProfileScreen: { email?: string; otp?: string };
+  ProviderProfileScreen: { email?: string; otp?: string; source?: 'onboarding' | 'settings' };
   CreateNewPasswordScreen: { email: string; otp: string };
   SelectRoleScreen: { intent?: AuthIntent } | undefined;
   ReceiptOnBoardScreen: { role?: AuthRole; intent?: AuthIntent } | undefined;

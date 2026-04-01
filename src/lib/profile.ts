@@ -65,3 +65,21 @@ export function getAvatarLetter(profile: Profile | null): string {
   const name = profile.full_name || profile.business_name || profile.email || '';
   return name.charAt(0).toUpperCase() || '?';
 }
+
+/**
+ * Storage uploads often reuse the same public URL (upsert same path). React Native's Image
+ * caches by URI, so use a stable version key (e.g. profile.updated_at) to force refetch after updates.
+ */
+export function avatarUriWithCacheBust(
+  url: string | null | undefined,
+  cacheKey?: string | null
+): string | undefined {
+  if (url == null || typeof url !== 'string') return undefined;
+  const trimmed = url.trim();
+  if (!trimmed) return undefined;
+  if (!/^https?:\/\//i.test(trimmed)) return trimmed;
+  const key = cacheKey?.trim();
+  if (!key) return trimmed;
+  const sep = trimmed.includes('?') ? '&' : '?';
+  return `${trimmed}${sep}v=${encodeURIComponent(key)}`;
+}

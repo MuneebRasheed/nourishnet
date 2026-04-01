@@ -24,11 +24,18 @@ function replaceToProfileCompletion(
   );
 }
 
+export type AuthCompletionOptions = {
+  /** Signup (e.g. OAuth from SignupScreen) can still enforce entry role vs DB role. Login ignores it. */
+  flow?: 'login' | 'signup';
+};
+
 export async function completeAuthAndGoToMainTabs(
   navigation: NativeStackNavigationProp<RootStackParamList>,
   role: AuthRole | undefined,
-  setAuth: (role: AuthRole | null, profile: Profile | null) => void
+  setAuth: (role: AuthRole | null, profile: Profile | null) => void,
+  options?: AuthCompletionOptions
 ): Promise<{ ok: true } | { ok: false; message: string }> {
+  const flow = options?.flow ?? 'signup';
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -41,7 +48,12 @@ export async function completeAuthAndGoToMainTabs(
   const profile = await fetchProfile(user.id);
   const email = user.email ?? '';
 
-  if (role && profile?.role && profile.role !== role) {
+  if (
+    flow === 'signup' &&
+    role &&
+    profile?.role &&
+    profile.role !== role
+  ) {
     await safeSignOut();
     setAuth(null, null);
     return {

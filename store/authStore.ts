@@ -38,6 +38,17 @@ function normalizeAuthRole(role: unknown): AuthRole | null {
   return null;
 }
 
+/** True if either persisted field says provider (avoids missing UI after rehydration desync). */
+export function isProviderSession(
+  userRole: AuthRole | null,
+  profile: Profile | null
+): boolean {
+  return (
+    normalizeAuthRole(userRole) === 'provider' ||
+    normalizeAuthRole(profile?.role) === 'provider'
+  );
+}
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({

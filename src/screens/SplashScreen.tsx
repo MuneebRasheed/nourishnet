@@ -14,8 +14,21 @@ import { supabase } from '../lib/supabase';
 import { fetchProfile, needsProfileCompletion } from '../lib/profile';
 import { hasCompletedOnboarding } from '../lib/onboardingStorage';
 
-/** Delay so persisted auth has time to rehydrate from AsyncStorage. */
-const REHYDRATE_DELAY_MS = 800;
+/** Brief delay after Zustand rehydration so Supabase client can read its session from AsyncStorage. */
+const POST_HYDRATE_DELAY_MS = 150;
+
+function waitForAuthStoreHydration(): Promise<void> {
+  return new Promise((resolve) => {
+    if (useAuthStore.persist.hasHydrated()) {
+      resolve();
+      return;
+    }
+    const unsub = useAuthStore.persist.onFinishHydration(() => {
+      unsub();
+      resolve();
+    });
+  });
+}
 
 /**
  * Flow: Splash → check Supabase session →
@@ -28,7 +41,6 @@ const SplashScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const theme = useThemeStore((state) => state.theme);
   const setAuth = useAuthStore((state) => state.setAuth);
-  const userRole = useAuthStore((state) => state.userRole);
   const isDark = theme === 'dark';
   const colors: AppColors = getColors(isDark);
   const fontSizes = useAppFontSizes();
@@ -36,7 +48,8 @@ const SplashScreen = () => {
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
-      await new Promise((r) => setTimeout(r, REHYDRATE_DELAY_MS));
+      await waitForAuthStoreHydration();
+      await new Promise((r) => setTimeout(r, POST_HYDRATE_DELAY_MS));
       if (cancelled) return;
       const { data: { session } } = await supabase.auth.getSession();
       if (cancelled) return;
@@ -47,7 +60,8 @@ const SplashScreen = () => {
         const mustFinishProfile =
           !profile || !profile.role || needsProfileCompletion(profile);
         if (mustFinishProfile) {
-          const r = profile?.role ?? userRole;
+          const r =
+            profile?.role ?? useAuthStore.getState().userRole;
           setAuth(r ?? null, profile ?? null);
           if (r === 'provider') {
             navigation.replace('ProviderProfileScreen', { email });
@@ -71,7 +85,7 @@ const SplashScreen = () => {
     return () => {
       cancelled = true;
     };
-  }, [navigation, setAuth, userRole]);
+  }, [navigation, setAuth]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>

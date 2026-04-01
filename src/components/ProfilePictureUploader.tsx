@@ -2,6 +2,7 @@ import React from 'react'
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native'
 import { useThemeStore } from '../../store/themeStore'
 import { useAuthStore } from '../../store/authStore'
+import { avatarUriWithCacheBust } from '../lib/profile'
 import { getColors, palette } from '../../utils/colors'
 import { useAppFontSizes } from '../../theme/fonts'
 import { fontFamilies } from '../../theme/typography'
@@ -11,6 +12,8 @@ import ProfileFood from '../assets/svgs/ProfileFood'
 
 type ProfilePictureUploaderProps = {
   imageUri?: string | null
+  /** For remote avatars, e.g. profile.updated_at — avoids stale Image cache when URL path is unchanged. */
+  imageCacheKey?: string | null
   onPress?: () => void
   PlaceholderIcon?: React.ComponentType<any>
 }
@@ -20,6 +23,7 @@ const CAMERA_BADGE_SIZE = 50
 
 export function ProfilePictureUploader({
   imageUri,
+  imageCacheKey,
   onPress,
   PlaceholderIcon,
 }: ProfilePictureUploaderProps) {
@@ -27,6 +31,7 @@ export function ProfilePictureUploader({
   const userRole = useAuthStore((s) => s.userRole)
   const colors = getColors(isDark)
   const fontSizes = useAppFontSizes()
+  const resolvedUri = avatarUriWithCacheBust(imageUri ?? undefined, imageCacheKey) ?? imageUri ?? undefined
 
   const IconComponent =
     PlaceholderIcon ??
@@ -48,9 +53,9 @@ export function ProfilePictureUploader({
           },
         ]}
       >
-        {imageUri ? (
+        {resolvedUri ? (
           <Image
-            source={{ uri: imageUri }}
+            source={{ uri: resolvedUri }}
             style={styles.avatarImage}
             resizeMode="cover"
           />

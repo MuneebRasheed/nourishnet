@@ -17,6 +17,7 @@ import BoxIcon from '../assets/svgs/BoxIcon';
 import ClockICon from '../assets/svgs/ClockICon';
 import LocationPin from '../assets/svgs/LocationPin';
 import { supabase } from '../lib/supabase';
+import { avatarUriWithCacheBust } from '../lib/profile';
 import { generatePickupPinApi } from '../lib/api/listings';
 import { PickupPinModal } from '../components/PickupPinModal';
 
@@ -86,18 +87,25 @@ export default function ListingRequestsScreen() {
     const recipientIds = Array.from(new Set(rows.map((r) => r.recipient_id).filter(Boolean)));
 
     // 2) Optional: fetch profiles for names/avatars
-    const profilesById = new Map<string, { full_name: string | null; avatar_url: string | null }>();
+    const profilesById = new Map<
+      string,
+      { full_name: string | null; avatar_url: string | null; updated_at: string | null }
+    >();
     if (recipientIds.length > 0) {
       const { data: profiles, error: profErr } = await supabase
         .from('profiles')
-        .select('id, full_name, avatar_url')
+        .select('id, full_name, avatar_url, updated_at')
         .in('id', recipientIds);
 
       if (profErr) {
         console.error('[ListingRequestsScreen] fetch profiles', profErr);
       } else {
         for (const p of profiles ?? []) {
-          profilesById.set(p.id, { full_name: p.full_name ?? null, avatar_url: p.avatar_url ?? null });
+          profilesById.set(p.id, {
+            full_name: p.full_name ?? null,
+            avatar_url: p.avatar_url ?? null,
+            updated_at: p.updated_at ?? null,
+          });
         }
       }
     }
@@ -108,11 +116,12 @@ export default function ListingRequestsScreen() {
         (profile?.full_name && profile.full_name.trim().length > 0
           ? profile.full_name.trim()
           : null) ?? 'Recipient';
+      const avatarUri = avatarUriWithCacheBust(profile?.avatar_url, profile?.updated_at);
 
       return {
         id: r.id,
         requesterName: displayName,
-        avatar: profile?.avatar_url ? { uri: profile.avatar_url } : undefined,
+        avatar: avatarUri ? { uri: avatarUri } : undefined,
         recipientId: r.recipient_id,
         distance: '—',
         requestedAt: formatTimeAgo(r.created_at),

@@ -91,6 +91,7 @@ const EditProfileScreen = ({ route }: Props) => {
         if (uploaded) avatarUrl = uploaded
       }
       const emailValue = emailFromRoute || profile?.email || user.email || ''
+      const updatedAt = new Date().toISOString()
       const { error: updateError } = await supabase
         .from('profiles')
         .update({
@@ -99,7 +100,7 @@ const EditProfileScreen = ({ route }: Props) => {
           full_name: fullName.trim(),
           address: address.trim(),
           avatar_url: avatarUrl,
-          updated_at: new Date().toISOString(),
+          updated_at: updatedAt,
         })
         .eq('id', user.id)
       if (updateError) {
@@ -117,6 +118,8 @@ const EditProfileScreen = ({ route }: Props) => {
         business_name: null,
         business_address: null,
         categories: [],
+        created_at: profile?.created_at,
+        updated_at: updatedAt,
       })
       navigation.replace('MainTabs', { screen: 'Home' })
     } catch (e) {
@@ -172,6 +175,7 @@ const EditProfileScreen = ({ route }: Props) => {
           </Text>
           <ProfilePictureUploader
             imageUri={profileImageUri}
+            imageCacheKey={profile?.updated_at}
             onPress={handleUploadPhoto}
           />
           </View>

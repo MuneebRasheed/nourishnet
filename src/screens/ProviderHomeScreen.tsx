@@ -24,7 +24,7 @@ import { ProviderListingCard } from '../components/ProviderListingCard';
 import { useProviderListingsStore, type ProviderListing } from '../../store/providerListingsStore';
 import { fetchListingsApi, deleteListingApi } from '../lib/api/listings';
 import { useAuthStore } from '../../store/authStore';
-import { getDisplayName } from '../lib/profile';
+import { getDisplayName, avatarUriWithCacheBust } from '../lib/profile';
 import { Ionicons } from '@expo/vector-icons';
 import ForkKnife from '../assets/svgs/ForkKnife';
 import CheckMarkHeart from '../assets/svgs/CheckMarkHeart';
@@ -44,6 +44,7 @@ export default function ProviderHomeScreen() {
   const insets = useSafeAreaInsets();
   const profile = useAuthStore((s) => s.profile);
   const userRole = useAuthStore((s) => s.userRole);
+  const providerHomeAvatarUri = avatarUriWithCacheBust(profile?.avatar_url, profile?.updated_at);
   const allListings = useProviderListingsStore((s) => s.listings);
   const setListings = useProviderListingsStore((s) => s.setListings);
   const removeListing = useProviderListingsStore((s) => s.removeListing);
@@ -145,7 +146,11 @@ export default function ProviderHomeScreen() {
             userName={getDisplayName(profile) || undefined}
             notificationCount={NOTIFICATION_COUNT}
             streakText={streakText}
-            avatarSource={profile?.avatar_url ? { uri: profile.avatar_url } : (defaultAvatar as ImageSourcePropType)}
+            avatarSource={
+              providerHomeAvatarUri
+                ? { uri: providerHomeAvatarUri }
+                : (defaultAvatar as ImageSourcePropType)
+            }
           />
 
           <ContinueButton
