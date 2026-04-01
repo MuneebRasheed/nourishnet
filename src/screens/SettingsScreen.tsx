@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
+  ActivityIndicator,
   Alert,
   StyleSheet,
   Text,
@@ -40,6 +42,7 @@ import DeleteIcon from '../assets/svgs/DeleteIcon';
 import CrownIcon from '../assets/svgs/CrownIcon';
 import KingIcon from '../assets/svgs/KingIcon';
 import { fetchStreakTextApi } from '../lib/api/analytics';
+import { API_BASE_URL } from '../lib/api/client';
 export default function SettingsScreen() {
   const theme = useThemeStore((s) => s.theme);
   const isDark = useResolvedIsDark();
@@ -90,16 +93,76 @@ export default function SettingsScreen() {
 
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
-  const DEACTIVATE_GRACE_DAYS = 30;
+  const [deactivateLoading, setDeactivateLoading] = useState(false);
 
   const handleLogoutConfirm = async () => {
     setShowLogoutModal(false);
     await handleLogout();
   };
 
-  const handleDeactivateConfirm = () => {
-    setShowDeactivateModal(false);
-    // TODO: call API to deactivate account
+  const handleDeactivateConfirm = async () => {
+    if (deactivateLoading) return;
+    setDeactivateLoading(true);
+    try {
+      await supabase.auth.refreshSession().catch(() => {});
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        Alert.alert('Session expired', 'Please sign in again.');
+        setShowDeactivateModal(false);
+        return;
+      }
+      const base = API_BASE_URL.replace(/\/$/, '');
+      const res = await fetch(`${base}/auth/delete-user`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({}),
+      });
+      const text = await res.text();
+      let body: { success?: boolean; error?: string } = {};
+      try {
+        body = text ? (JSON.parse(text) as typeof body) : {};
+      } catch {
+        Alert.alert(
+          'Could not delete account',
+          'The server did not return a valid response. Check EXPO_PUBLIC_API_URL and that your API is running.'
+        );
+        return;
+      }
+      if (body.error) {
+        Alert.alert('Could not delete account', String(body.error));
+        return;
+      }
+      if (!body.success) {
+        Alert.alert(
+          'Could not delete account',
+          'The account was not removed. Confirm your API has SUPABASE_SERVICE_ROLE_KEY set and POST /auth/delete-user is reachable.'
+        );
+        return;
+      }
+      setShowDeactivateModal(false);
+      await supabase.auth.signOut().catch(() => {});
+      await AsyncStorage.multiRemove([
+        'nourishnet-auth',
+        'nourishnet_onboarding_completed',
+      ]).catch(() => {});
+      clearAuth();
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [{ name: 'LoginScreen' }],
+        })
+      );
+    } catch (e) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Something went wrong.');
+    } finally {
+      setDeactivateLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -334,7 +397,7 @@ export default function SettingsScreen() {
                 },
               ]}
             >
-              Your data will be permanently deleted within {DEACTIVATE_GRACE_DAYS} days.
+              This permanently deletes your account and profile on the server. You cannot undo this.
             </Text>
             <View style={styles.deactivateModalButtons}>
               <Pressable
@@ -361,21 +424,29 @@ export default function SettingsScreen() {
                 </Text>
               </Pressable>
               <Pressable
-                style={[styles.deactivateModalConfirmBtn, { backgroundColor: palette.logoutColor }]}
+                style={[
+                  styles.deactivateModalConfirmBtn,
+                  { backgroundColor: palette.logoutColor, opacity: deactivateLoading ? 0.7 : 1 },
+                ]}
                 onPress={handleDeactivateConfirm}
+                disabled={deactivateLoading}
               >
-                <Text
-                  style={[
-                    styles.deactivateModalConfirmText,
-                    {
-                      color: palette.white,
-                      fontFamily: fontFamilies.interSemiBold,
-                      fontSize: fonts.subhead,
-                    },
-                  ]}
-                >
-                  Deactivate
-                </Text>
+                {deactivateLoading ? (
+                  <ActivityIndicator color={palette.white} />
+                ) : (
+                  <Text
+                    style={[
+                      styles.deactivateModalConfirmText,
+                      {
+                        color: palette.white,
+                        fontFamily: fontFamilies.interSemiBold,
+                        fontSize: fonts.subhead,
+                      },
+                    ]}
+                  >
+                    Deactivate
+                  </Text>
+                )}
               </Pressable>
             </View>
           </Pressable>

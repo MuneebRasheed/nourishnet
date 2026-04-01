@@ -11,7 +11,7 @@ import { fontFamilies } from '../../theme/typography';
 import { RootStackParamList } from '../navigations/RootNavigation';
 import SplashIcon from '../assets/svgs/SplashIcon';
 import { supabase } from '../lib/supabase';
-import { fetchProfile } from '../lib/profile';
+import { fetchProfile, needsProfileCompletion } from '../lib/profile';
 import { hasCompletedOnboarding } from '../lib/onboardingStorage';
 
 /** Delay so persisted auth has time to rehydrate from AsyncStorage. */
@@ -28,6 +28,7 @@ const SplashScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const theme = useThemeStore((state) => state.theme);
   const setAuth = useAuthStore((state) => state.setAuth);
+  const userRole = useAuthStore((state) => state.userRole);
   const isDark = theme === 'dark';
   const colors: AppColors = getColors(isDark);
   const fontSizes = useAppFontSizes();
@@ -42,12 +43,23 @@ const SplashScreen = () => {
       if (session?.user) {
         const profile = await fetchProfile(session.user.id);
         if (cancelled) return;
-        if (profile) {
-          setAuth(profile.role ?? null, profile);
+        const email = session.user.email ?? '';
+        const mustFinishProfile =
+          !profile || !profile.role || needsProfileCompletion(profile);
+        if (mustFinishProfile) {
+          const r = profile?.role ?? userRole;
+          setAuth(r ?? null, profile ?? null);
+          if (r === 'provider') {
+            navigation.replace('ProviderProfileScreen', { email });
+          } else if (r === 'recipient') {
+            navigation.replace('EditProfileScreen', { email });
+          } else {
+            navigation.replace('SelectRoleScreen', { intent: 'signup' });
+          }
         } else {
-          setAuth(null, null);
+          setAuth(profile.role, profile);
+          navigation.replace('MainTabs');
         }
-        navigation.replace('MainTabs');
       } else {
         setAuth(null, null);
         const done = await hasCompletedOnboarding();
@@ -59,7 +71,7 @@ const SplashScreen = () => {
     return () => {
       cancelled = true;
     };
-  }, [navigation, setAuth]);
+  }, [navigation, setAuth, userRole]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>

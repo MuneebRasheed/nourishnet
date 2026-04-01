@@ -37,6 +37,23 @@ export async function fetchProfile(userId: string): Promise<Profile | null> {
   };
 }
 
+/** True until role is set and required fields for that role are filled (matches email signup → profile screens). */
+export function needsProfileCompletion(profile: Profile | null): boolean {
+  if (!profile) return true;
+  if (!profile.role) return true;
+  if (profile.role === 'provider') {
+    return (
+      !profile.business_name?.trim() ||
+      !profile.business_address?.trim() ||
+      !String(profile.phone ?? '').trim()
+    );
+  }
+  if (profile.role === 'recipient') {
+    return !profile.full_name?.trim() || !profile.address?.trim();
+  }
+  return true;
+}
+
 export function getDisplayName(profile: Profile | null): string {
   if (!profile) return '';
   if (profile.role === 'provider' && profile.business_name) return profile.business_name;

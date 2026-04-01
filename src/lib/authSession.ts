@@ -1,7 +1,7 @@
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AuthRole, Profile } from '../../store/authStore';
 import type { RootStackParamList } from '../navigations/RootNavigation';
-import { fetchProfile } from './profile';
+import { fetchProfile, needsProfileCompletion } from './profile';
 import { markOnboardingComplete } from './onboardingStorage';
 import { supabase } from './supabase';
 
@@ -11,6 +11,17 @@ export async function safeSignOut(): Promise<void> {
   const message = (error.message ?? '').toLowerCase();
   if (message.includes('refresh token') && message.includes('not found')) return;
   throw error;
+}
+
+function replaceToProfileCompletion(
+  navigation: NativeStackNavigationProp<RootStackParamList>,
+  role: AuthRole,
+  email: string
+) {
+  navigation.replace(
+    role === 'provider' ? 'ProviderProfileScreen' : 'EditProfileScreen',
+    { email }
+  );
 }
 
 export async function completeAuthAndGoToMainTabs(
@@ -28,6 +39,8 @@ export async function completeAuthAndGoToMainTabs(
     };
   }
   const profile = await fetchProfile(user.id);
+  const email = user.email ?? '';
+
   if (role && profile?.role && profile.role !== role) {
     await safeSignOut();
     setAuth(null, null);
@@ -39,8 +52,36 @@ export async function completeAuthAndGoToMainTabs(
           : 'Please Login as Provider.',
     };
   }
-  const resolvedRole = (profile?.role ?? role ?? null) as AuthRole | null;
-  const profileWithRole = profile ? { ...profile, role: resolvedRole } : null;
+
+  // Row missing, or trigger created row with role still null (common) — same as post-OTP signup.
+  const noRoleOrNoRow = !profile || !profile.role;
+  if (noRoleOrNoRow) {
+    if (!role) {
+      await safeSignOut();
+      setAuth(null, null);
+      return {
+        ok: false,
+        message:
+          'Please choose your role first (Provider or Recipient), then continue with social sign-in.',
+      };
+    }
+    setAuth(role, profile);
+    await markOnboardingComplete();
+    setTimeout(() => replaceToProfileCompletion(navigation, role, email), 0);
+    return { ok: true };
+  }
+
+  // Role set: only go to MainTabs when profile matches email signup completion.
+  if (needsProfileCompletion(profile)) {
+    const effectiveRole = profile.role;
+    setAuth(effectiveRole, profile);
+    await markOnboardingComplete();
+    setTimeout(() => replaceToProfileCompletion(navigation, effectiveRole, email), 0);
+    return { ok: true };
+  }
+
+  const resolvedRole = profile.role;
+  const profileWithRole = { ...profile, role: resolvedRole };
   setAuth(resolvedRole, profileWithRole);
   await markOnboardingComplete();
   setTimeout(() => navigation.replace('MainTabs'), 0);
