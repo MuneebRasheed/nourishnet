@@ -20,7 +20,7 @@ import ContinueButton from '../components/ContinueButton';
 import { ProviderListingCard } from '../components/ProviderListingCard';
 import { ActiveCompletedTabs, type ActiveCompletedTab } from '../components/ActiveCompletedTabs';
 import { useProviderListingsStore, type ProviderListing } from '../../store/providerListingsStore';
-import { deleteListingApi } from '../lib/api/listings';
+import { deleteListingApi, cancelListingApi, activateListingApi } from '../lib/api/listings';
 import { Ionicons } from '@expo/vector-icons';
 import BoxIcon from '../assets/svgs/BoxIcon';
 import SettingsHeader from '../components/SettingsHeader';
@@ -39,6 +39,7 @@ export default function ProviderListingsScreen() {
   const insets = useSafeAreaInsets();
   const allListings = useProviderListingsStore((s) => s.listings);
   const removeListing = useProviderListingsStore((s) => s.removeListing);
+  const addListingFromApi = useProviderListingsStore((s) => s.addListingFromApi);
   const [activeTab, setActiveTab] = useState<ActiveCompletedTab>('Active');
   type ListingsNav = NativeStackNavigationProp<ListingsStackParamList, 'ProviderListingsScreen'>;
 type RootNav = NativeStackNavigationProp<RootStackParamList, keyof RootStackParamList>;
@@ -53,7 +54,7 @@ const navigation = useNavigation<CompositeNavigationProp<ListingsNav, RootNav>>(
     () =>
       allListings.filter((l) => {
         if (activeTab === 'Active') return ACTIVE_LISTING_STATUSES.has(l.status);
-        return l.status === 'completed';
+        return l.status === 'completed' || l.status === 'cancelled';
       }),
     [ACTIVE_LISTING_STATUSES, allListings, activeTab]
   );
@@ -95,12 +96,54 @@ const navigation = useNavigation<CompositeNavigationProp<ListingsNav, RootNav>>(
     );
   };
 
+  const handleInactiveListing = (listing: ProviderListing) => {
+    Alert.alert(
+      'Mark listing inactive?',
+      `Recipients will no longer see "${listing.title || 'this listing'}". It stays in My Listings under Completed.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Mark inactive',
+          onPress: async () => {
+            const { listing: updated, error } = await cancelListingApi(listing.id);
+            if (error) {
+              Alert.alert('Error', error);
+              return;
+            }
+            if (updated) addListingFromApi(updated);
+          },
+        },
+      ]
+    );
+  };
+
+  const handleActivateListing = (listing: ProviderListing) => {
+    Alert.alert(
+      'Activate listing?',
+      `"${listing.title || 'This listing'}" will show again to recipients.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Activate',
+          onPress: async () => {
+            const { listing: updated, error } = await activateListingApi(listing.id);
+            if (error) {
+              Alert.alert('Error', error);
+              return;
+            }
+            if (updated) addListingFromApi(updated);
+          },
+        },
+      ]
+    );
+  };
+
   const emptyTitle =
-    activeTab === 'Active' ? 'No active listings' : 'No completed listings';
+    activeTab === 'Active' ? 'No active listings' : 'No past listings';
   const emptySubtitle =
     activeTab === 'Active'
       ? 'Create a new listing to start sharing food'
-      : 'Completed pickups will appear here';
+      : 'Completed pickups and inactive listings appear here';
 
   return (
     <View style={[styles.container, { paddingTop: insets.top,backgroundColor: colors.background }]}>
@@ -187,10 +230,26 @@ const navigation = useNavigation<CompositeNavigationProp<ListingsNav, RootNav>>(
                 address={listing.pickupAddress}
                 foodType={listing.foodType}
                 imageSource={listing.imageUrl ? { uri: listing.imageUrl } : undefined}
-                statusLabel={ACTIVE_LISTING_STATUSES.has(listing.status) ? 'Active' : 'Completed'}
+                statusLabel={
+                  ACTIVE_LISTING_STATUSES.has(listing.status)
+                    ? 'Active'
+                    : listing.status === 'cancelled'
+                      ? 'Inactive'
+                      : 'Completed'
+                }
                 statusColor={ACTIVE_LISTING_STATUSES.has(listing.status) ? palette.roleBulbColor2 : colors.textSecondary}
                 onPressViewRequests={() => handleViewRequests(listing)}
                 onEdit={() => handleEditListing(listing)}
+                onInactive={
+                  ACTIVE_LISTING_STATUSES.has(listing.status)
+                    ? () => handleInactiveListing(listing)
+                    : undefined
+                }
+                onActivate={
+                  listing.status === 'cancelled'
+                    ? () => handleActivateListing(listing)
+                    : undefined
+                }
                 onDelete={() => handleDeleteListing(listing)}
               />
             ))

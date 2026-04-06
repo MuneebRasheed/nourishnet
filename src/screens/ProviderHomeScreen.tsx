@@ -22,7 +22,7 @@ import { ProviderImpactStatCard, ProviderImpactStatsRow } from '../components/Pr
 import { ProviderQuickActionButton, ProviderQuickActionsRow } from '../components/ProviderQuickActionButton';
 import { ProviderListingCard } from '../components/ProviderListingCard';
 import { useProviderListingsStore, type ProviderListing } from '../../store/providerListingsStore';
-import { fetchListingsApi, deleteListingApi } from '../lib/api/listings';
+import { fetchListingsApi, deleteListingApi, cancelListingApi } from '../lib/api/listings';
 import { useAuthStore } from '../../store/authStore';
 import { getDisplayName, avatarUriWithCacheBust } from '../lib/profile';
 import { Ionicons } from '@expo/vector-icons';
@@ -48,6 +48,7 @@ export default function ProviderHomeScreen() {
   const allListings = useProviderListingsStore((s) => s.listings);
   const setListings = useProviderListingsStore((s) => s.setListings);
   const removeListing = useProviderListingsStore((s) => s.removeListing);
+  const addListingFromApi = useProviderListingsStore((s) => s.addListingFromApi);
   const [streakText, setStreakText] = useState('0-day streak');
 
   useFocusEffect(
@@ -113,6 +114,27 @@ export default function ProviderHomeScreen() {
               return;
             }
             removeListing(listing.id);
+          },
+        },
+      ]
+    );
+  };
+
+  const handleInactiveListing = (listing: ProviderListing) => {
+    Alert.alert(
+      'Mark listing inactive?',
+      `Recipients will no longer see "${listing.title || 'this listing'}". It stays in My Listings under Completed.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Mark inactive',
+          onPress: async () => {
+            const { listing: updated, error } = await cancelListingApi(listing.id);
+            if (error) {
+              Alert.alert('Error', error);
+              return;
+            }
+            if (updated) addListingFromApi(updated);
           },
         },
       ]
@@ -315,6 +337,7 @@ export default function ProviderHomeScreen() {
                 statusLabel={ACTIVE_LISTING_STATUSES.has(listing.status) ? 'Active' : 'Completed'}
                 onPressViewRequests={handleViewListings}
                 onEdit={() => handleEditListing(listing)}
+                onInactive={() => handleInactiveListing(listing)}
                 onDelete={() => handleDeleteListing(listing)}
               />
             ))

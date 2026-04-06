@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Alert,
+  ActivityIndicator,
   StyleSheet,
   Text,
   View,
@@ -28,7 +29,12 @@ import LockIcon from '../assets/svgs/LockIcon';
 import BarcodeIcon from '../assets/svgs/BarcodeIcon';
 import { FoodCardData } from '../components/FoodCard';
 import { Ionicons } from '@expo/vector-icons';
-import { requestClaimApi, verifyPickupPinApi } from '../lib/api/listings';
+import {
+  requestClaimApi,
+  verifyPickupPinApi,
+  fetchMyRequestStatusForListing,
+  type RecipientRequestStatus,
+} from '../lib/api/listings';
 
 export type FoodDetailItem = FoodCardData & {
   pickupAddress?: string;
@@ -41,6 +47,8 @@ export type FoodDetailItem = FoodCardData & {
   foodType?: string;
   /** Optional provider avatar image; when absent, first letter of source is shown */
   providerImage?: ImageSourcePropType;
+  /** From My Requests — used for first paint before status refresh */
+  requestStatus?: RecipientRequestStatus;
 };
 
 function FoodDetailScreen() {
@@ -52,29 +60,55 @@ function FoodDetailScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'FoodDetailScreen'>>();
   const route = useRoute<RouteProp<RootStackParamList, 'FoodDetailScreen'>>();
   const item = route.params?.item;
-  const [requestSubmitted, setRequestSubmitted] = useState(false);
-  const [showPinQrButtons, setShowPinQrButtons] = useState(false);
+  const isRequestedLocal = useRequestedListingsStore((s) =>
+    item?.id ? s.isRequested(item.id) : false
+  );
+  const [requestLoaded, setRequestLoaded] = useState(false);
+  const [serverRequestStatus, setServerRequestStatus] = useState<RecipientRequestStatus | 'none'>('none');
   const [showVerifyPickupModal, setShowVerifyPickupModal] = useState(false);
   const [showPickupVerifiedModal, setShowPickupVerifiedModal] = useState(false);
 
   useEffect(() => {
-    if (!item?.id) return;
-    setRequestSubmitted(useRequestedListingsStore.getState().isRequested(item.id));
+    setRequestLoaded(false);
+    setServerRequestStatus('none');
   }, [item?.id]);
 
-  // Refresh "already requested" state when screen comes back into focus (e.g. after navigating back).
   useFocusEffect(
     React.useCallback(() => {
-      if (!item?.id) return;
-      setRequestSubmitted(useRequestedListingsStore.getState().isRequested(item.id));
+      if (!item?.id) return undefined;
+      let cancelled = false;
+      (async () => {
+        const { status, error } = await fetchMyRequestStatusForListing(item.id);
+        if (cancelled) return;
+        if (!error) {
+          setServerRequestStatus(status);
+          const store = useRequestedListingsStore.getState();
+          if (status === 'none') store.removeRequestedId(item.id);
+          else store.addRequestedId(item.id);
+        }
+        setRequestLoaded(true);
+      })();
+      return () => {
+        cancelled = true;
+      };
     }, [item?.id])
   );
 
-  useEffect(() => {
-    if (!requestSubmitted) return;
-    const t = setTimeout(() => setShowPinQrButtons(true), 3000);
-    return () => clearTimeout(t);
-  }, [requestSubmitted]);
+  const displayRequestState = useMemo(() => {
+    if (!item?.id) return 'none' as const;
+    if (requestLoaded && serverRequestStatus !== 'none') {
+      return serverRequestStatus;
+    }
+    if (requestLoaded && serverRequestStatus === 'none') {
+      return isRequestedLocal ? ('pending' as const) : ('none' as const);
+    }
+    const param = item.requestStatus;
+    if (param === 'pending' || param === 'won' || param === 'lost' || param === 'cancelled') {
+      return param;
+    }
+    if (isRequestedLocal) return 'pending' as const;
+    return 'loading' as const;
+  }, [item?.id, item?.requestStatus, requestLoaded, serverRequestStatus, isRequestedLocal]);
 
   const openVerifyPickupModal = () => setShowVerifyPickupModal(true);
   const closeVerifyPickupModal = () => setShowVerifyPickupModal(false);
@@ -307,59 +341,100 @@ function FoodDetailScreen() {
             style={styles.navigateShareBar}
           />
 
-          {requestSubmitted ? (
-            showPinQrButtons ? (
-              <View style={styles.pinQrRow}>
-                <ContinueButton
-                  label="Pin Code"
-                  onPress={openVerifyPickupModal}
-                  isDark={isDark}
-                  backgroundColor={colors.primary}
-                  textColor={palette.white}
-                  icon={<LockIcon width={20} height={20} color={palette.white} />}
-                  iconPosition="left"
-                  style={styles.pinQrBtn}
-                />
-                <ContinueButton
-                  label="QR Code"
-                  onPress={() => navigation.navigate('QRCodeScreen', { listingId: item.id, mode: 'scan' })}
-                  isDark={isDark}
-                  backgroundColor={colors.inputFieldBg}
-                  textColor={colors.text}
-                  icon={<BarcodeIcon width={20} height={20} color={colors.text} />}
-                  iconPosition="left"
-                  style={styles.pinQrBtn}
-                />
-              </View>
-            ) : (
-              <View style={[styles.requestSubmittedBtn, { backgroundColor: colors.inputFieldBg }]}>
-                <TimerIcon width={20} height={20} color={colors.textSecondary} />
-                <Text style={[styles.requestSubmittedText, { color: colors.textSecondary, fontFamily: fontFamilies.inter, fontSize: fonts.body }]}>
-                  Request Submitted
-                </Text>
-              </View>
-            )
-          ) : (
+          {displayRequestState === 'loading' && (
+            <View style={[styles.requestStatusLoading, { marginTop: 8 }]}>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          )}
+
+          {displayRequestState === 'none' && (
             <ContinueButton
               label="Request This Food"
               onPress={async () => {
                 const { request, error } = await requestClaimApi(item.id);
                 if (error || !request) {
-                  // Already requested or listing not requestable: refresh UI, no error modal.
                   if (error === 'listing_not_requestable' || error === 'already_requested') {
                     useRequestedListingsStore.getState().addRequestedId(item.id);
-                    setRequestSubmitted(true);
+                    setServerRequestStatus('pending');
+                    setRequestLoaded(true);
                     return;
                   }
                   Alert.alert('Error', error ?? 'Failed to request this food. Please try again.');
                   return;
                 }
                 useRequestedListingsStore.getState().addRequestedId(item.id);
-                setRequestSubmitted(true);
+                setServerRequestStatus('pending');
+                setRequestLoaded(true);
               }}
               isDark={isDark}
               style={styles.requestBtn}
             />
+          )}
+
+          {displayRequestState === 'pending' && (
+            <View style={[styles.requestSubmittedBtn, { backgroundColor: colors.inputFieldBg }]}>
+              <TimerIcon width={20} height={20} color={colors.textSecondary} />
+              <Text style={[styles.requestSubmittedText, { color: colors.textSecondary, fontFamily: fontFamilies.inter, fontSize: fonts.body }]}>
+                Request Submitted
+              </Text>
+            </View>
+          )}
+
+          {displayRequestState === 'won' && (
+            <View style={styles.pinQrRow}>
+              <ContinueButton
+                label="Pin Code"
+                onPress={openVerifyPickupModal}
+                isDark={isDark}
+                backgroundColor={colors.primary}
+                textColor={palette.white}
+                icon={<LockIcon width={20} height={20} color={palette.white} />}
+                iconPosition="left"
+                style={styles.pinQrBtn}
+              />
+              <ContinueButton
+                label="QR Code"
+                onPress={() => navigation.navigate('QRCodeScreen', { listingId: item.id, mode: 'scan' })}
+                isDark={isDark}
+                backgroundColor={colors.inputFieldBg}
+                textColor={colors.text}
+                icon={<BarcodeIcon width={20} height={20} color={colors.text} />}
+                iconPosition="left"
+                style={styles.pinQrBtn}
+              />
+            </View>
+          )}
+
+          {displayRequestState === 'cancelled' && (
+            <Text
+              style={[
+                styles.requestOutcomeText,
+                {
+                  color: colors.textSecondary,
+                  fontFamily: fontFamilies.interMedium,
+                  fontSize: fonts.body,
+                  marginTop: 12,
+                },
+              ]}
+            >
+              The provider declined your request.
+            </Text>
+          )}
+
+          {displayRequestState === 'lost' && (
+            <Text
+              style={[
+                styles.requestOutcomeText,
+                {
+                  color: colors.textSecondary,
+                  fontFamily: fontFamilies.interMedium,
+                  fontSize: fonts.body,
+                  marginTop: 12,
+                },
+              ]}
+            >
+              Another recipient was selected for this listing.
+            </Text>
           )}
 
           <View style={styles.bottomContainer}>
@@ -546,6 +621,14 @@ const styles = StyleSheet.create({
   },
   pinQrBtn: {
     flex: 1,
+  },
+  requestStatusLoading: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+  },
+  requestOutcomeText: {
+    textAlign: 'center',
   },
   bottomContainer: {
     marginTop: 8,

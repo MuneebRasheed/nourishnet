@@ -4,6 +4,7 @@ import { create } from 'zustand';
 interface RequestedListingsState {
   requestedIds: Set<string>;
   addRequestedId: (id: string) => void;
+  removeRequestedId: (id: string) => void;
   setRequestedIds: (ids: string[]) => void;
   isRequested: (id: string) => boolean;
 }
@@ -14,6 +15,12 @@ export const useRequestedListingsStore = create<RequestedListingsState>((set, ge
     set((state) => ({
       requestedIds: new Set([...state.requestedIds, id]),
     })),
+  removeRequestedId: (id) =>
+    set((state) => {
+      const next = new Set(state.requestedIds);
+      next.delete(id);
+      return { requestedIds: next };
+    }),
   setRequestedIds: (ids) =>
     set({ requestedIds: new Set(ids) }),
   isRequested: (id) => get().requestedIds.has(id),

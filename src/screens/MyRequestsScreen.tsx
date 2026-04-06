@@ -18,7 +18,8 @@ import { useAppFontSizes } from '../../theme/fonts';
 import { fontFamilies } from '../../theme/typography';
 import { RootStackParamList } from '../navigations/RootNavigation';
 import SettingsHeader from '../components/SettingsHeader';
-import FoodCard, { type FoodCardData } from '../components/FoodCard';
+import FoodCard from '../components/FoodCard';
+import type { FoodDetailItem } from './FoodDetailScreen';
 import CheckMarkHeart from '../assets/svgs/CheckMarkHeart';
 import { fetchMyRequestsApi, type MyRequestItem } from '../lib/api/listings';
 
@@ -66,10 +67,18 @@ export default function MyRequestsScreen() {
 
   const requests = activeTab === 'Active' ? activeRequests : completedRequests;
 
-  const toCardItem = (item: MyRequestItem): FoodCardData => ({
-    ...item,
+  const toCardItem = (item: MyRequestItem): FoodDetailItem => ({
+    id: item.id,
     image: item.imageUrl ? { uri: item.imageUrl } : DEFAULT_LISTING_IMAGE,
+    title: item.title,
+    source: item.source,
+    distance: item.distance,
+    postedAgo: item.postedAgo,
+    portions: item.portions,
+    timeSlot: item.timeSlot,
+    dietaryTags: item.dietaryTags,
     isLive: false,
+    requestStatus: item.requestStatus,
   });
 
   return (

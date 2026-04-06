@@ -335,7 +335,11 @@ router.patch('/:id', async (req, res) => {
     }
     const body = req.body || {};
     const updates = { updated_at: new Date().toISOString() };
-    if (body.status === 'active' || body.status === 'completed') {
+    if (
+      body.status === 'active' ||
+      body.status === 'completed' ||
+      body.status === 'cancelled'
+    ) {
       updates.status = body.status;
     }
     // Full listing update (for edit flow)

@@ -233,6 +233,9 @@ type MyRequestRow = {
   listing_created_at: string;
 };
 
+/** Listing request row status from `listing_requests` (provider accept/decline / window). */
+export type RecipientRequestStatus = 'pending' | 'won' | 'lost' | 'cancelled';
+
 /** One request with listing data for My Requests screen (id = listing_id for navigation). */
 export type MyRequestItem = {
   id: string;
@@ -245,6 +248,8 @@ export type MyRequestItem = {
   timeSlot: string;
   dietaryTags?: string[];
   listingStatus: string;
+  /** Status of this recipient's request for the listing */
+  requestStatus: RecipientRequestStatus;
 };
 
 function formatPostedAgo(createdAt: string): string {
@@ -257,7 +262,13 @@ function formatPostedAgo(createdAt: string): string {
   return `${days} day${days > 1 ? 's' : ''} ago`;
 }
 
+function normalizeRequestStatus(s: string): RecipientRequestStatus | null {
+  if (s === 'pending' || s === 'won' || s === 'lost' || s === 'cancelled') return s;
+  return null;
+}
+
 function rowToMyRequestItem(row: MyRequestRow): MyRequestItem {
+  const requestStatus = normalizeRequestStatus(row.request_status) ?? 'pending';
   return {
     id: row.listing_id,
     imageUrl: row.image_url ?? null,
@@ -269,7 +280,23 @@ function rowToMyRequestItem(row: MyRequestRow): MyRequestItem {
     timeSlot: [row.start_time, row.end_time].filter(Boolean).join(' - ') || '—',
     dietaryTags: row.dietary_tags?.length ? row.dietary_tags : undefined,
     listingStatus: row.listing_status,
+    requestStatus,
   };
+}
+
+/** Current user's request for a listing, if any (`none` = no row). */
+export async function fetchMyRequestStatusForListing(
+  listingId: string
+): Promise<{ status: RecipientRequestStatus | 'none'; error?: string }> {
+  const { data, error } = await supabase.rpc('get_my_requests');
+  if (error) {
+    return { status: 'none', error: error.message ?? 'Failed to load request status' };
+  }
+  const rows = (Array.isArray(data) ? data : []) as MyRequestRow[];
+  const row = rows.find((r) => r.listing_id === listingId);
+  if (!row) return { status: 'none' };
+  const normalized = normalizeRequestStatus(row.request_status);
+  return { status: normalized ?? 'pending' };
 }
 
 export async function fetchMyRequestsApi(): Promise<{
@@ -350,6 +377,38 @@ export async function completeListingApi(id: string): Promise<{ listing: Provide
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     return { listing: null, error: data?.error ?? 'Failed to update listing' };
+  }
+  const listing = data.listing ? mapApiToListing(data.listing) : null;
+  return { listing };
+}
+
+/** Marks listing inactive (cancelled): hidden from browse, not deleted. */
+export async function cancelListingApi(id: string): Promise<{ listing: ProviderListing | null; error?: string }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/listings/${id}`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({ status: 'cancelled' }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return { listing: null, error: data?.error ?? 'Failed to mark listing inactive' };
+  }
+  const listing = data.listing ? mapApiToListing(data.listing) : null;
+  return { listing };
+}
+
+/** Reactivates a cancelled (inactive) listing so recipients can see it again. */
+export async function activateListingApi(id: string): Promise<{ listing: ProviderListing | null; error?: string }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/listings/${id}`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({ status: 'active' }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return { listing: null, error: data?.error ?? 'Failed to reactivate listing' };
   }
   const listing = data.listing ? mapApiToListing(data.listing) : null;
   return { listing };

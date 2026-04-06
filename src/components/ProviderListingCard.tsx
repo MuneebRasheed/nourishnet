@@ -31,6 +31,9 @@ type ProviderListingCardProps = {
   imageSource?: ImageSourcePropType;
   onPressViewRequests?: () => void;
   onEdit?: () => void;
+  onInactive?: () => void;
+  /** Shown only for inactive (cancelled) listings — set back to active. */
+  onActivate?: () => void;
   onDelete?: () => void;
 };
 
@@ -46,6 +49,8 @@ export function ProviderListingCard({
   imageSource,
   onPressViewRequests,
   onEdit,
+  onInactive,
+  onActivate,
   onDelete,
 }: ProviderListingCardProps) {
   const [menuVisible, setMenuVisible] = useState(false);
@@ -76,10 +81,76 @@ export function ProviderListingCard({
     closeMenu();
     onEdit?.();
   };
+  const handleInactive = () => {
+    closeMenu();
+    onInactive?.();
+  };
+  const handleActivate = () => {
+    closeMenu();
+    onActivate?.();
+  };
   const handleDelete = () => {
     closeMenu();
     onDelete?.();
   };
+
+  const showMenuTrigger =
+    onEdit != null || onInactive != null || onActivate != null || onDelete != null;
+
+  const menuItems: React.ReactNode[] = [];
+  const pushDivider = () => {
+    if (menuItems.length > 0) {
+      menuItems.push(
+        <View
+          key={`div-${menuItems.length}`}
+          style={[styles.menuDivider, { backgroundColor: colors.borderColor }]}
+        />
+      );
+    }
+  };
+  if (onEdit != null) {
+    menuItems.push(
+      <TouchableOpacity key="edit" style={styles.menuItemRow} onPress={handleEdit} activeOpacity={0.7}>
+        <EditIcon width={18} height={18} color={colors.text} />
+        <Text style={[styles.menuItemText, { color: colors.text, fontFamily: fontFamilies.interMedium, fontSize: fonts.caption }]}>
+          Edit
+        </Text>
+      </TouchableOpacity>
+    );
+  }
+  if (onInactive != null) {
+    pushDivider();
+    menuItems.push(
+      <TouchableOpacity key="inactive" style={styles.menuItemRow} onPress={handleInactive} activeOpacity={0.7}>
+        <Ionicons name="pause-circle-outline" size={18} color={colors.text} />
+        <Text style={[styles.menuItemText, { color: colors.text, fontFamily: fontFamilies.interMedium, fontSize: fonts.caption }]}>
+          Inactive
+        </Text>
+      </TouchableOpacity>
+    );
+  }
+  if (onActivate != null) {
+    pushDivider();
+    menuItems.push(
+      <TouchableOpacity key="activate" style={styles.menuItemRow} onPress={handleActivate} activeOpacity={0.7}>
+        <Ionicons name="play-circle-outline" size={18} color={palette.roleBulbColor2} />
+        <Text style={[styles.menuItemText, { color: palette.roleBulbColor2, fontFamily: fontFamilies.interMedium, fontSize: fonts.caption }]}>
+          Active
+        </Text>
+      </TouchableOpacity>
+    );
+  }
+  if (onDelete != null) {
+    pushDivider();
+    menuItems.push(
+      <TouchableOpacity key="delete" style={styles.menuItemRow} onPress={handleDelete} activeOpacity={0.7}>
+        <Ionicons name="trash-outline" size={18} color={palette.logoutColor} />
+        <Text style={[styles.menuItemText, { color: palette.logoutColor, fontFamily: fontFamilies.interMedium, fontSize: fonts.caption }]}>
+          Delete
+        </Text>
+      </TouchableOpacity>
+    );
+  }
 
   return (
     <View style={[styles.card, { backgroundColor: cardBg, borderColor }]}>
@@ -119,7 +190,7 @@ export function ProviderListingCard({
                   {statusLabel}
                 </Text>
               </View>
-              {(onEdit != null || onDelete != null) && (
+              {showMenuTrigger && (
                 <View ref={threeDotRef} collapsable={false}>
                   <TouchableOpacity
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -155,23 +226,7 @@ export function ProviderListingCard({
                 ]}
                 onStartShouldSetResponder={() => true}
               >
-                {onEdit != null && (
-                  <TouchableOpacity style={styles.menuItemRow} onPress={handleEdit} activeOpacity={0.7}>
-                    <EditIcon width={18} height={18} color={colors.text} />
-                    <Text style={[styles.menuItemText, { color: colors.text, fontFamily: fontFamilies.interMedium, fontSize: fonts.caption }]}>
-                      Edit
-                    </Text>
-                  </TouchableOpacity>
-                )}
-                {onEdit != null && onDelete != null && <View style={[styles.menuDivider, { backgroundColor: colors.borderColor }]} />}
-                {onDelete != null && (
-                  <TouchableOpacity style={styles.menuItemRow} onPress={handleDelete} activeOpacity={0.7}>
-                    <Ionicons name="trash-outline" size={18} color={palette.logoutColor} />
-                    <Text style={[styles.menuItemText, { color: palette.logoutColor, fontFamily: fontFamilies.interMedium, fontSize: fonts.caption }]}>
-                      Delete
-                    </Text>
-                  </TouchableOpacity>
-                )}
+                {menuItems}
               </View>
             </Pressable>
           </Modal>
