@@ -1,0 +1,96 @@
+import Constants from 'expo-constants';
+import * as Device from 'expo-device';
+import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
+
+import { supabase } from './supabase';
+
+function getEasProjectId(): string | undefined {
+  const fromConfig =
+    Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+  if (typeof fromConfig === 'string' && fromConfig.trim()) return fromConfig.trim();
+  return undefined;
+}
+
+export function configureNotificationHandler(): void {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
+  });
+}
+
+async function getCurrentUserId(): Promise<string | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return user?.id ?? null;
+}
+
+export async function saveExpoPushTokenToProfile(userId: string, token: string): Promise<void> {
+  const { error } = await supabase
+    .from('profiles')
+    .update({
+      expo_push_token: token,
+      expo_push_token_updated_at: new Date().toISOString(),
+    })
+    .eq('id', userId);
+  if (error) {
+    console.warn('[push] Failed to save expo push token', error.message);
+  }
+}
+
+export async function clearExpoPushTokenFromProfile(userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('profiles')
+    .update({
+      expo_push_token: null,
+      expo_push_token_updated_at: null,
+    })
+    .eq('id', userId);
+  if (error) {
+    console.warn('[push] Failed to clear expo push token', error.message);
+  }
+}
+
+/**
+ * iOS only: requests permission, resolves Expo push token, stores on `profiles`.
+ * No-op on non-iOS or simulator (remote push requires a physical device + dev build).
+ */
+export async function registerIosPushTokenIfNeeded(): Promise<void> {
+  if (Platform.OS !== 'ios') return;
+  if (!Device.isDevice) {
+    console.warn('[push] Expo push token requires a physical iOS device');
+    return;
+  }
+
+  const projectId = getEasProjectId();
+  if (!projectId) {
+    console.warn(
+      '[push] Missing EAS project id. Set EXPO_PUBLIC_EAS_PROJECT_ID in .env (expo.dev project → Project settings → Project ID).'
+    );
+    return;
+  }
+
+  const userId = await getCurrentUserId();
+  if (!userId) return;
+
+  const { status: existing } = await Notifications.getPermissionsAsync();
+  const { status } =
+    existing === 'granted'
+      ? { status: existing }
+      : await Notifications.requestPermissionsAsync();
+  if (status !== 'granted') {
+    console.warn('[push] Notification permission not granted');
+    return;
+  }
+
+  const tokenRes = await Notifications.getExpoPushTokenAsync({ projectId });
+  const token = tokenRes.data;
+  if (!token) return;
+
+  await saveExpoPushTokenToProfile(userId, token);
+}

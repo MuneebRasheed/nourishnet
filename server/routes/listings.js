@@ -280,6 +280,134 @@ router.get('/browse', async (req, res) => {
   }
 });
 
+// ---------- Recipient: my requests with listing details (GET /listings/my-requests) ----------
+// Uses service role after JWT verification so completed listings are visible (RLS would hide them).
+router.get('/my-requests', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const supabase = getSupabaseWithAuth(authHeader);
+    if (!supabase) {
+      return send(res, { error: 'Server auth is not configured or missing Authorization header' }, 401);
+    }
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user?.id) {
+      console.warn('[listings GET /my-requests] auth.getUser failed', userError);
+      return send(res, { error: userError?.message ?? 'Invalid token or user not found' }, 401);
+    }
+
+    const service = getSupabaseService();
+    if (!service) {
+      return send(
+        res,
+        { error: 'Server misconfigured: SUPABASE_SERVICE_ROLE_KEY is required for /listings/my-requests' },
+        503
+      );
+    }
+
+    const { data: reqs, error: reqErr } = await service
+      .from('listing_requests')
+      .select('id, listing_id, status, created_at')
+      .eq('recipient_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (reqErr) {
+      console.error('[listings GET /my-requests] listing_requests', reqErr);
+      return send(res, { error: reqErr.message ?? 'Failed to fetch requests' }, 500);
+    }
+
+    const rows = reqs ?? [];
+    if (rows.length === 0) {
+      return send(res, { requests: [] }, 200);
+    }
+
+    const listingIds = [...new Set(rows.map((r) => r.listing_id))];
+    const { data: listings, error: listErr } = await service
+      .from('listings')
+      .select(
+        'id, title, food_type, quantity, quantity_unit, dietary_tags, allergens, pickup_address, start_time, end_time, note, image_url, status, created_at'
+      )
+      .in('id', listingIds);
+
+    if (listErr) {
+      console.error('[listings GET /my-requests] listings', listErr);
+      return send(res, { error: listErr.message ?? 'Failed to fetch listings' }, 500);
+    }
+
+    const byId = new Map((listings ?? []).map((l) => [l.id, l]));
+
+    const requests = rows
+      .map((r) => {
+        const l = byId.get(r.listing_id);
+        if (!l) return null;
+        return {
+          request_id: r.id,
+          listing_id: r.listing_id,
+          request_status: r.status,
+          request_created_at: r.created_at,
+          listing_title: l.title,
+          food_type: l.food_type,
+          quantity: l.quantity,
+          quantity_unit: l.quantity_unit,
+          dietary_tags: l.dietary_tags,
+          allergens: l.allergens,
+          pickup_address: l.pickup_address,
+          start_time: l.start_time,
+          end_time: l.end_time,
+          note: l.note,
+          image_url: l.image_url,
+          listing_status: l.status,
+          listing_created_at: l.created_at,
+        };
+      })
+      .filter(Boolean);
+
+    return send(res, { requests }, 200);
+  } catch (e) {
+    console.error('[listings GET /my-requests]', e);
+    return send(res, { error: 'Something went wrong' }, 500);
+  }
+});
+
+// ---------- Recipient: request status for one listing (GET /listings/:id/my-request) ----------
+router.get('/:id/my-request', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const supabase = getSupabaseWithAuth(authHeader);
+    if (!supabase) {
+      return send(res, { error: 'Server auth is not configured or missing Authorization header' }, 401);
+    }
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user?.id) {
+      console.warn('[listings GET /:id/my-request] auth.getUser failed', userError);
+      return send(res, { error: userError?.message ?? 'Invalid token or user not found' }, 401);
+    }
+
+    const listingId = req.params.id;
+    if (!listingId) {
+      return send(res, { error: 'Listing id is required' }, 400);
+    }
+
+    const { data, error } = await supabase
+      .from('listing_requests')
+      .select('status')
+      .eq('listing_id', listingId)
+      .eq('recipient_id', user.id)
+      .maybeSingle();
+
+    if (error) {
+      console.error('[listings GET /:id/my-request]', error);
+      return send(res, { error: error.message ?? 'Failed to load request status' }, 500);
+    }
+    if (!data) {
+      return send(res, { status: 'none' }, 200);
+    }
+    return send(res, { status: data.status }, 200);
+  } catch (e) {
+    console.error('[listings GET /:id/my-request]', e);
+    return send(res, { error: 'Something went wrong' }, 500);
+  }
+});
+
 // ---------- Delete listing (DELETE /listings/:id) ----------
 router.delete('/:id', async (req, res) => {
   try {

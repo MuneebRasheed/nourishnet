@@ -39,6 +39,12 @@
           "cameraPermission": "NourishNet can use the camera if you take a new photo for your profile or listing."
         }
       ]
-    ]
+    ],
+        "extra": {
+          "eas": {
+            "projectId": "88871950-b33e-435a-805d-aa4197c28196"
+          }
+        }
+    
   }
 }

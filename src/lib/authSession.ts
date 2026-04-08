@@ -3,9 +3,16 @@ import type { AuthRole, Profile } from '../../store/authStore';
 import type { RootStackParamList } from '../navigations/RootNavigation';
 import { fetchProfile, needsProfileCompletion } from './profile';
 import { markOnboardingComplete } from './onboardingStorage';
+import { clearExpoPushTokenFromProfile } from './pushNotifications';
 import { supabase } from './supabase';
 
 export async function safeSignOut(): Promise<void> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (session?.user?.id) {
+    await clearExpoPushTokenFromProfile(session.user.id).catch(() => {});
+  }
   const { error } = await supabase.auth.signOut();
   if (!error) return;
   const message = (error.message ?? '').toLowerCase();

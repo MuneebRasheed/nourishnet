@@ -15,6 +15,13 @@ plugins.push('expo-apple-authentication', [
   { iosUrlScheme: googleIosUrlScheme },
 ]);
 
+plugins.push([
+  'expo-notifications',
+  {
+    enableBackgroundRemoteNotifications: true,
+  },
+]);
+
 const existingInfoPlist = appJson.expo.ios?.infoPlist ?? {};
 const existingUrlTypes = Array.isArray(existingInfoPlist.CFBundleURLTypes)
   ? existingInfoPlist.CFBundleURLTypes
@@ -37,6 +44,9 @@ const infoPlistWithGoogleScheme = hasGoogleScheme
       ],
     };
 
+const extraEasProjectId =
+  process.env.EXPO_PUBLIC_EAS_PROJECT_ID || appJson.expo.extra?.eas?.projectId;
+
 module.exports = {
   expo: {
     ...appJson.expo,
@@ -46,5 +56,12 @@ module.exports = {
       infoPlist: infoPlistWithGoogleScheme,
     },
     plugins,
+    extra: {
+      ...(appJson.expo.extra || {}),
+      eas: {
+        ...(appJson.expo.extra?.eas || {}),
+        ...(extraEasProjectId ? { projectId: extraEasProjectId } : {}),
+      },
+    },
   },
 };

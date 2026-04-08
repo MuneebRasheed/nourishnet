@@ -212,7 +212,7 @@ export async function verifyPickupPinApi(
   return { result: data ?? null };
 }
 
-/** Row shape returned by get_my_requests RPC (Supabase snake_case). */
+/** Row shape returned by GET /listings/my-requests (snake_case). */
 type MyRequestRow = {
   request_id: string;
   listing_id: string;
@@ -288,14 +288,18 @@ function rowToMyRequestItem(row: MyRequestRow): MyRequestItem {
 export async function fetchMyRequestStatusForListing(
   listingId: string
 ): Promise<{ status: RecipientRequestStatus | 'none'; error?: string }> {
-  const { data, error } = await supabase.rpc('get_my_requests');
-  if (error) {
-    return { status: 'none', error: error.message ?? 'Failed to load request status' };
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/listings/${listingId}/my-request`, {
+    method: 'GET',
+    headers,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return { status: 'none', error: data?.error ?? 'Failed to load request status' };
   }
-  const rows = (Array.isArray(data) ? data : []) as MyRequestRow[];
-  const row = rows.find((r) => r.listing_id === listingId);
-  if (!row) return { status: 'none' };
-  const normalized = normalizeRequestStatus(row.request_status);
+  const s = data?.status as string | undefined;
+  if (s === 'none' || s == null) return { status: 'none' };
+  const normalized = normalizeRequestStatus(s);
   return { status: normalized ?? 'pending' };
 }
 
@@ -304,11 +308,17 @@ export async function fetchMyRequestsApi(): Promise<{
   completed: MyRequestItem[];
   error?: string;
 }> {
-  const { data, error } = await supabase.rpc('get_my_requests');
-  if (error) {
-    return { active: [], completed: [], error: error.message ?? 'Failed to fetch my requests' };
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/listings/my-requests`, { method: 'GET', headers });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return {
+      active: [],
+      completed: [],
+      error: data?.error ?? 'Failed to fetch my requests',
+    };
   }
-  const rows = (Array.isArray(data) ? data : []) as MyRequestRow[];
+  const rows = (Array.isArray(data.requests) ? data.requests : []) as MyRequestRow[];
   const active: MyRequestItem[] = [];
   const completed: MyRequestItem[] = [];
   for (const row of rows) {

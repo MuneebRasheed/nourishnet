@@ -18,6 +18,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { useThemeStore } from './store/themeStore';
 import { getColors } from './utils/colors';
 import RootNavigation from './src/navigations/RootNavigation';
+import PushNotificationSetup from './src/components/PushNotificationSetup';
 const fontMap = {
   Poppins_400Regular,
   Poppins_500Medium,
@@ -42,6 +43,7 @@ export default function App() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <NavigationContainer>
+        <PushNotificationSetup />
         <RootNavigation />
       </NavigationContainer>
       <StatusBar style={isDark ? 'light' : 'dark'} />

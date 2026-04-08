@@ -23,7 +23,25 @@ app.get('/api', (req, res) => {
   res.json({
     name: 'NourishNet API',
     version: '1.0.0',
-    endpoints: ['/health', '/api', '/auth/send-signup-otp', '/auth/verify-signup-otp', '/auth/forgot-password', '/auth/verify-reset-otp', '/auth/verify-reset-otp-and-set-password', '/auth/change-password', '/auth/delete-user', '/listings (GET, POST)', '/listings/:id (PATCH, DELETE)'],
+    endpoints: [
+      '/health',
+      '/api',
+      '/auth/send-signup-otp',
+      '/auth/verify-signup-otp',
+      '/auth/forgot-password',
+      '/auth/verify-reset-otp',
+      '/auth/verify-reset-otp-and-set-password',
+      '/auth/change-password',
+      '/auth/delete-user',
+      '/listings (GET, POST)',
+      '/listings/browse (GET)',
+      '/listings/my-requests (GET)',
+      '/listings/:id/my-request (GET)',
+      '/listings/:id (PATCH, DELETE)',
+      '/listings/:id/request (POST)',
+      '/listings/:id/pickup-pin (POST)',
+      '/listings/:id/verify-pin (POST)',
+    ],
   });
 });
 

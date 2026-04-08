@@ -45,6 +45,7 @@ import CrownIcon from '../assets/svgs/CrownIcon';
 import KingIcon from '../assets/svgs/KingIcon';
 import { fetchStreakTextApi } from '../lib/api/analytics';
 import { API_BASE_URL } from '../lib/api/client';
+import { safeSignOut } from '../lib/authSession';
 export default function SettingsScreen() {
   const theme = useThemeStore((s) => s.theme);
   const isDark = useResolvedIsDark();
@@ -96,14 +97,12 @@ export default function SettingsScreen() {
   };
 
   const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      const msg = (error.message ?? '').toLowerCase();
-      // If token is already missing, treat user as logged out.
-      if (!(msg.includes('refresh token') && msg.includes('not found'))) {
-        Alert.alert('Logout failed', error.message ?? 'Please try again.');
-        return;
-      }
+    try {
+      await safeSignOut();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      Alert.alert('Logout failed', message || 'Please try again.');
+      return;
     }
     clearAuth();
     navigation.dispatch(
