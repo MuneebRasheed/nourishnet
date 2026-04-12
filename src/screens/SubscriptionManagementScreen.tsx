@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -6,11 +6,20 @@ import {
   ScrollView,
   Pressable,
   Linking,
+  Platform,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import Purchases, {
+  PURCHASES_ERROR_CODE,
+  type CustomerInfo,
+  type PurchasesError,
+  type PurchasesPackage,
+} from 'react-native-purchases';
 import { useResolvedIsDark } from '../../store/themeStore';
+import { useOfferingsStore } from '../../store/offeringsStore';
 import { getColors, palette } from '../../utils/colors';
 import { useAppFontSizes } from '../../theme/fonts';
 import { fontFamilies } from '../../theme/typography';
@@ -25,6 +34,37 @@ import DiamondIcon from '../assets/svgs/DiamondIcon';
 
 type BillingPeriod = 'monthly' | 'annual';
 
+const PLUS_PACKAGE_MONTHLY = 'monthly_plus';
+const PLUS_PACKAGE_ANNUAL = 'yearly_plus';
+
+function activeSubscriptionTier(info: CustomerInfo | null): 'basic' | 'plus' | 'pro' {
+  if (!info) {
+    return 'basic';
+  }
+  let hasPlus = false;
+  for (const ent of Object.values(info.entitlements.active)) {
+    const pid = (ent?.productIdentifier ?? '').toLowerCase();
+    if (pid.includes('pro_')) {
+      return 'pro';
+    }
+    if (pid.includes('plus_')) {
+      hasPlus = true;
+    }
+  }
+  return hasPlus ? 'plus' : 'basic';
+}
+
+function findPlusPackage(
+  packages: readonly PurchasesPackage[] | undefined,
+  billing: BillingPeriod
+): PurchasesPackage | null {
+  if (!packages?.length) {
+    return null;
+  }
+  const id = billing === 'annual' ? PLUS_PACKAGE_ANNUAL : PLUS_PACKAGE_MONTHLY;
+  return packages.find((p) => p.identifier === id) ?? null;
+}
+
 export default function SubscriptionManagementScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -32,10 +72,97 @@ export default function SubscriptionManagementScreen() {
   const colors = getColors(isDark);
   const fontSizes = useAppFontSizes();
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
+  const [purchasing, setPurchasing] = useState<'plus' | 'pro' | null>(null);
+  const [restoring, setRestoring] = useState(false);
+
+  const offerings = useOfferingsStore((s) => s.offerings);
+  const customerInfo = useOfferingsStore((s) => s.customerInfo);
+  const setCustomerInfo = useOfferingsStore((s) => s.setCustomerInfo);
+
+  const tier = useMemo(() => activeSubscriptionTier(customerInfo), [customerInfo]);
+
+  const currentOffering = offerings?.current ?? null;
+
+  const { plusPackage, proPackage } = useMemo(() => {
+    if (!currentOffering) {
+      return { plusPackage: null as PurchasesPackage | null, proPackage: null as PurchasesPackage | null };
+    }
+    const plus = findPlusPackage(currentOffering.availablePackages, billingPeriod);
+    const pro =
+      billingPeriod === 'annual' ? currentOffering.annual ?? null : currentOffering.monthly ?? null;
+    return { plusPackage: plus, proPackage: pro };
+  }, [currentOffering, billingPeriod]);
+
+  const plusPriceText = plusPackage?.product.priceString ?? '—';
+  const proPriceText = proPackage?.product.priceString ?? '—';
+  const pricePeriodLabel = billingPeriod === 'annual' ? '/year' : '/month';
+
+  useFocusEffect(
+    useCallback(() => {
+      void Purchases.getCustomerInfo()
+        .then((info) => setCustomerInfo(info))
+        .catch(() => setCustomerInfo(null));
+    }, [setCustomerInfo])
+  );
 
   const handleBack = () => {
     if (navigation.canGoBack()) navigation.goBack();
   };
+
+  const handlePurchase = async (pkg: PurchasesPackage | null, plan: 'plus' | 'pro') => {
+    if (!pkg) {
+      Alert.alert(
+        'Unavailable',
+        'This plan could not be loaded. Check your connection and try opening this screen again.'
+      );
+      return;
+    }
+    setPurchasing(plan);
+    try {
+      const { customerInfo: next } = await Purchases.purchasePackage(pkg);
+      setCustomerInfo(next);
+      Alert.alert('Subscribed', 'Your subscription is now active.');
+    } catch (e) {
+      const err = e as PurchasesError;
+      if (err.code === PURCHASES_ERROR_CODE.PURCHASE_CANCELLED_ERROR) {
+        return;
+      }
+      Alert.alert('Purchase did not complete', err.message ?? 'Please try again.');
+    } finally {
+      setPurchasing(null);
+    }
+  };
+
+  const handleRestore = async () => {
+    setRestoring(true);
+    try {
+      const info = await Purchases.restorePurchases();
+      setCustomerInfo(info);
+      const nextTier = activeSubscriptionTier(info);
+      if (nextTier === 'basic') {
+        Alert.alert('Restore complete', 'No active subscriptions were found for this account.');
+      } else {
+        Alert.alert('Restore complete', 'Your purchases have been restored.');
+      }
+    } catch (e) {
+      const err = e as PurchasesError;
+      Alert.alert('Restore failed', err.message ?? 'Please try again.');
+    } finally {
+      setRestoring(false);
+    }
+  };
+
+  const openManageSubscriptions = () => {
+    if (Platform.OS === 'ios') {
+      void Linking.openURL('https://apps.apple.com/account/subscriptions');
+    } else {
+      void Linking.openURL('https://play.google.com/store/account/subscriptions');
+    }
+  };
+
+  const basicIsCurrent = tier === 'basic';
+  const plusIsCurrent = tier === 'plus';
+  const proIsCurrent = tier === 'pro';
 
   return (
     <View
@@ -71,13 +198,11 @@ export default function SubscriptionManagementScreen() {
           icon={<StarIcon width={20} height={18} color={palette.basicIconColor} />}
           title="Basic"
           priceText="Free"
+          pricePeriodLabel=""
           features={['Browse listings', 'Request food', 'Pickup notifications']}
           buttonLabel="Current Plan"
-          isCurrentPlan
+          isCurrentPlan={basicIsCurrent}
           isDark={isDark}
-          // customCardBackgroundColor={palette.notificationFreshBg}
-          // customCardBorderColor={colors.primary}
-          // customCardBorderWidth={0}
           customTitleColor={colors.text}
           customButtonTextColor={colors.text}
         />
@@ -85,54 +210,44 @@ export default function SubscriptionManagementScreen() {
         <SubscriptionPlanCard
           icon={<KingIcon width={20} height={16} color={palette.kingIconColor} />}
           title="Plus"
-          priceText={billingPeriod === 'annual' ? '$4.99' : '$5.99'}
+          priceText={plusPriceText}
+          pricePeriodLabel={pricePeriodLabel}
           features={['Everything in Basic', 'Priority requests', 'Unlimited listings']}
-          buttonLabel="Upgrade to Plus"
-          isCurrentPlan={false}
+          buttonLabel={plusIsCurrent ? 'Current Plan' : proIsCurrent ? 'Included with Pro' : 'Upgrade to Plus'}
+          isCurrentPlan={plusIsCurrent}
           isMostPopular
-          offerTag={billingPeriod === 'annual' ? '2 months free' : undefined}
+          offerTag={billingPeriod === 'annual' ? 'Best value' : undefined}
           isDark={isDark}
           customCardBackgroundColor={palette.notificationFreshBg}
           customCardBorderColor={colors.primary}
           customCardBorderWidth={1}
           customTitleColor={colors.text}
           customButtonTextColor={palette.white}
-          onButtonPress={() => {}}
+          buttonDisabled={proIsCurrent}
+          isLoading={purchasing === 'plus'}
+          onButtonPress={() => void handlePurchase(plusPackage, 'plus')}
         />
 
         <SubscriptionPlanCard
           icon={<DiamondIcon width={20} height={18} color={palette.diamondIconColor} />}
           title="Pro"
-          priceText={billingPeriod === 'annual' ? '$8.99' : '$9.99'}
+          priceText={proPriceText}
+          pricePeriodLabel={pricePeriodLabel}
           features={['Everything in Plus', 'Analytics dashboard', 'Premium badge']}
-          buttonLabel="Current Plan"
-          isCurrentPlan={false}
+          buttonLabel={proIsCurrent ? 'Current Plan' : 'Upgrade to Pro'}
+          isCurrentPlan={proIsCurrent}
           isDark={isDark}
-          // customCardBackgroundColor={palette.notificationFreshBg}
-          // customCardBorderColor={colors.primary}
-          // customCardBorderWidth={0}
           customTitleColor={colors.text}
-          customButtonTextColor={colors.textSecondary}
-          onButtonPress={() => {}}
+          customButtonTextColor={proIsCurrent ? colors.textSecondary : palette.white}
+          customButtonBackgroundColor={proIsCurrent ? colors.inputFieldBg : undefined}
+          isLoading={purchasing === 'pro'}
+          onButtonPress={() => void handlePurchase(proPackage, 'pro')}
         />
 
         <View style={styles.footer}>
-          <Pressable onPress={() => {}} style={styles.footerManageLink}>
-            <Text
-              style={[
-                styles.footerLink,
-                {
-                  color: palette.restorePurchasesColor,
-                  fontFamily: fontFamilies.interMedium,
-                  fontSize: fontSizes.subhead,
-                },
-              ]}
-            >
-              Restore Purchases
-            </Text>
-          </Pressable>
           <Pressable
-            onPress={() => Linking.openURL('https://apps.apple.com/account/subscriptions')}
+            onPress={() => void handleRestore()}
+            disabled={restoring}
             style={styles.footerManageLink}
           >
             <Text
@@ -142,10 +257,25 @@ export default function SubscriptionManagementScreen() {
                   color: palette.restorePurchasesColor,
                   fontFamily: fontFamilies.interMedium,
                   fontSize: fontSizes.subhead,
+                  opacity: restoring ? 0.6 : 1,
                 },
               ]}
             >
-              Manage via App Store
+              {restoring ? 'Restoring…' : 'Restore Purchases'}
+            </Text>
+          </Pressable>
+          <Pressable onPress={openManageSubscriptions} style={styles.footerManageLink}>
+            <Text
+              style={[
+                styles.footerLink,
+                {
+                  color: palette.restorePurchasesColor,
+                  fontFamily: fontFamilies.interMedium,
+                  fontSize: fontSizes.subhead,
+                },
+              ]}
+            >
+              {Platform.OS === 'ios' ? 'Manage via App Store' : 'Manage via Play Store'}
             </Text>
           </Pressable>
         </View>
@@ -159,8 +289,8 @@ export default function SubscriptionManagementScreen() {
             },
           ]}
         >
-          Subscriptions renew automatically unless canceled via App Store settings at least 24
-          hours before the end of the current period.
+          Subscriptions renew automatically unless canceled in your App Store or Google Play
+          subscription settings at least 24 hours before the end of the current period.
         </Text>
       </ScrollView>
     </View>
@@ -176,7 +306,6 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 24,
-    
   },
   segmentWrap: {
     marginBottom: 20,
@@ -195,8 +324,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-  footerManageLink:{
+  footerManageLink: {
     paddingHorizontal: 20,
-    // backgroundColor:"red"
-  }
+  },
 });

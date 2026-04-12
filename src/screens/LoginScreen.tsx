@@ -29,7 +29,7 @@ const LoginScreen = () => {
   const fonts = useAppFontSizes()
 
   const [mode, setMode] = useState<'email' | 'phone'>('email')
-  const [email, setEmail] = useState('test12@gmail.com')
+  const [email, setEmail] = useState( role === 'provider' ? 'test13@gmail.com' : 'test12@gmail.com')
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('Muneeb123@')
   const [loading, setLoading] = useState(false)

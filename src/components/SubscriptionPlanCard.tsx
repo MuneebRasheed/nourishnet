@@ -25,6 +25,12 @@ export type SubscriptionPlanCardProps = {
   customCardBorderWidth?: number;
   /** Override title color (e.g. to match Plus icon) */
   customTitleColor?: string;
+  /** Shown after the price (e.g. `/month`, `/year`). */
+  pricePeriodLabel?: string;
+  /** Disable the CTA without treating the plan as the active subscription. */
+  buttonDisabled?: boolean;
+  /** Show a loading state on the CTA. */
+  isLoading?: boolean;
   onButtonPress?: () => void;
 };
 
@@ -44,6 +50,9 @@ export function SubscriptionPlanCard({
   customCardBorderColor,
   customCardBorderWidth,
   customTitleColor,
+  pricePeriodLabel = '/month',
+  buttonDisabled = false,
+  isLoading = false,
   onButtonPress,
 }: SubscriptionPlanCardProps) {
   const colors = getColors(isDark);
@@ -149,18 +158,20 @@ export function SubscriptionPlanCard({
             >
               {priceText}
             </Text>
-            <Text
-              style={[
-                styles.perMonth,
-                {
-                  color: colors.text,
-                  fontSize: fontSizes.subhead,
-                  fontFamily: fontFamilies.inter,
-                },
-              ]}
-            >
-              /month
-            </Text>
+            {pricePeriodLabel ? (
+              <Text
+                style={[
+                  styles.perMonth,
+                  {
+                    color: colors.text,
+                    fontSize: fontSizes.subhead,
+                    fontFamily: fontFamilies.inter,
+                  },
+                ]}
+              >
+                {pricePeriodLabel}
+              </Text>
+            ) : null}
           </View>
 
           <View style={styles.features}>
@@ -187,13 +198,14 @@ export function SubscriptionPlanCard({
 
           <Pressable
             onPress={onButtonPress}
-            disabled={isCurrentPlan}
+            disabled={isCurrentPlan || buttonDisabled || isLoading}
             style={[
               styles.button,
               {
                 backgroundColor: buttonBgColor,
                 borderWidth: isInactiveCurrentPlanLabel ? 1 : 0,
                 borderColor: isInactiveCurrentPlanLabel ? colors.borderColor : 'transparent',
+                opacity: isLoading ? 0.85 : 1,
               },
             ]}
           >
@@ -207,7 +219,7 @@ export function SubscriptionPlanCard({
                 },
               ]}
             >
-              {buttonLabel}
+              {isLoading ? 'Processing…' : buttonLabel}
             </Text>
           </Pressable>
         </View>

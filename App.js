@@ -19,6 +19,7 @@ import { useThemeStore } from './store/themeStore';
 import { getColors } from './utils/colors';
 import RootNavigation from './src/navigations/RootNavigation';
 import PushNotificationSetup from './src/components/PushNotificationSetup';
+import RevenueCatInit from './src/components/RevenueCatInit';
 const fontMap = {
   Poppins_400Regular,
   Poppins_500Medium,
@@ -43,6 +44,7 @@ export default function App() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <NavigationContainer>
+        <RevenueCatInit />
         <PushNotificationSetup />
         <RootNavigation />
       </NavigationContainer>
