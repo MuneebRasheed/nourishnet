@@ -1,7 +1,9 @@
 import { supabase } from './supabase';
 import type { Profile } from '../../store/authStore';
+import { isGoogleMapsConfigured } from './googleMaps';
 
-const PROFILE_COLUMNS = 'id, role, email, full_name, avatar_url, address, phone, business_name, business_address, categories, created_at, updated_at';
+const PROFILE_COLUMNS =
+  'id, role, email, full_name, avatar_url, address, latitude, longitude, phone, business_name, business_address, business_latitude, business_longitude, categories, created_at, updated_at';
 
 function normalizeRole(role: unknown): Profile['role'] {
   if (typeof role !== 'string') return null;
@@ -28,9 +30,21 @@ export async function fetchProfile(userId: string): Promise<Profile | null> {
     full_name: data.full_name ?? null,
     avatar_url: data.avatar_url ?? null,
     address: data.address ?? null,
+    latitude:
+      data.latitude != null && Number.isFinite(Number(data.latitude)) ? Number(data.latitude) : null,
+    longitude:
+      data.longitude != null && Number.isFinite(Number(data.longitude)) ? Number(data.longitude) : null,
     phone: data.phone ?? null,
     business_name: data.business_name ?? null,
     business_address: data.business_address ?? null,
+    business_latitude:
+      data.business_latitude != null && Number.isFinite(Number(data.business_latitude))
+        ? Number(data.business_latitude)
+        : null,
+    business_longitude:
+      data.business_longitude != null && Number.isFinite(Number(data.business_longitude))
+        ? Number(data.business_longitude)
+        : null,
     categories: Array.isArray(data.categories) ? data.categories : [],
     created_at: data.created_at,
     updated_at: data.updated_at,
@@ -42,14 +56,22 @@ export function needsProfileCompletion(profile: Profile | null): boolean {
   if (!profile) return true;
   if (!profile.role) return true;
   if (profile.role === 'provider') {
+    const blat = profile.business_latitude ?? null;
+    const blng = profile.business_longitude ?? null;
+    const needsBusinessCoords =
+      isGoogleMapsConfigured() && (blat == null || blng == null);
     return (
       !profile.business_name?.trim() ||
       !profile.business_address?.trim() ||
-      !String(profile.phone ?? '').trim()
+      !String(profile.phone ?? '').trim() ||
+      needsBusinessCoords
     );
   }
   if (profile.role === 'recipient') {
-    return !profile.full_name?.trim() || !profile.address?.trim();
+    const lat = profile.latitude ?? null;
+    const lng = profile.longitude ?? null;
+    const needsCoords = isGoogleMapsConfigured() && (lat == null || lng == null);
+    return !profile.full_name?.trim() || !profile.address?.trim() || needsCoords;
   }
   return true;
 }

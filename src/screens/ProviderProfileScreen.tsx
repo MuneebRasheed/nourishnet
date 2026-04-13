@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useRef, useState } from 'react'
 import { StyleSheet, Text, View, ScrollView } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useThemeStore } from '../../store/themeStore'
@@ -9,15 +9,19 @@ import { AuthInput } from '../components/AuthInput'
 import ContinueButton from '../components/ContinueButton'
 import { ProfilePictureUploader } from '../components/ProfilePictureUploader'
 import CategoryChips from '../components/CategoryChips'
-import LocationPin from '../assets/svgs/LocationPin'
+import { RecipientLocationField } from '../components/RecipientLocationField'
+import { isGoogleMapsConfigured } from '../lib/googleMaps'
 import ProfileFood from '../assets/svgs/ProfileFood'
 import PhoneInput from 'react-native-phone-number-input'
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
+import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native'
+import type { CountryCode } from 'react-native-country-picker-modal'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { RootStackParamList } from '../navigations/RootNavigation'
-import { useAuthStore } from '../../store/authStore'
+import { useAuthStore, type Profile } from '../../store/authStore'
 import { supabase } from '../lib/supabase'
 import { pickImage, uploadAvatar } from '../lib/uploadAvatar'
+import { fetchProfile } from '../lib/profile'
+import { parseStoredPhoneForPhoneInput } from '../lib/phoneProfile'
 
 const FOOD_CATEGORY_OPTIONS = [
   'Prepared Meals',
@@ -42,8 +46,12 @@ export default function ProviderProfileScreen() {
 
   const [businessName, setBusinessName] = useState('')
   const [businessAddress, setBusinessAddress] = useState('')
+  const [businessLatitude, setBusinessLatitude] = useState<number | null>(null)
+  const [businessLongitude, setBusinessLongitude] = useState<number | null>(null)
   const [phone, setPhone] = useState('')
   const [phoneFormatted, setPhoneFormatted] = useState('')
+  const [phoneCountryIso, setPhoneCountryIso] = useState<CountryCode>('PK')
+  const [phoneInputKey, setPhoneInputKey] = useState(0)
   const [profileImageUri, setProfileImageUri] = useState<string | null>(null)
   const [profileImageBase64, setProfileImageBase64] = useState<string | null>(null)
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
@@ -55,32 +63,48 @@ export default function ProviderProfileScreen() {
   const setProfile = useAuthStore((s) => s.setProfile)
   const profile = useAuthStore((s) => s.profile)
 
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      const p = useAuthStore.getState().profile
-      if (isSettings && p) {
-        if (p.business_name) setBusinessName(p.business_name)
-        if (p.business_address) setBusinessAddress(p.business_address)
-        if (p.phone) {
-          setPhoneFormatted(p.phone)
-          setPhone(p.phone)
+  const hydrateFromProfile = useCallback((p: Profile) => {
+    if (p.role !== 'provider') return
+    if (p.business_name) setBusinessName(p.business_name)
+    else setBusinessName('')
+    if (p.business_address) setBusinessAddress(p.business_address)
+    else setBusinessAddress('')
+    setBusinessLatitude(p.business_latitude ?? null)
+    setBusinessLongitude(p.business_longitude ?? null)
+    const { nationalDigits, isoRegion } = parseStoredPhoneForPhoneInput(p.phone)
+    setPhoneCountryIso((isoRegion as CountryCode) || 'PK')
+    setPhone(nationalDigits)
+    setPhoneFormatted(p.phone?.trim() ?? '')
+    setPhoneInputKey((k) => k + 1)
+    if (p.categories?.length) setSelectedCategories([...p.categories])
+    else setSelectedCategories([])
+    if (p.avatar_url) setProfileImageUri(p.avatar_url)
+  }, [])
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false
+      ;(async () => {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user || cancelled) return
+        const p = await fetchProfile(user.id)
+        if (!p || cancelled) return
+        setProfile(p)
+        if (p.role === 'provider') {
+          hydrateFromProfile(p)
         }
-        if (p.categories?.length) setSelectedCategories([...p.categories])
-        if (p.avatar_url) setProfileImageUri(p.avatar_url)
+        const email =
+          emailFromRoute ||
+          (isSettings ? p.email : null) ||
+          user.email ||
+          ''
+        if (!cancelled && email) setDisplayEmail(email)
+      })()
+      return () => {
+        cancelled = true
       }
-      const { data: { user } } = await supabase.auth.getUser()
-      const email =
-        emailFromRoute ||
-        (isSettings ? p?.email : null) ||
-        user?.email ||
-        ''
-      if (!cancelled && email) setDisplayEmail(email)
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [isSettings, emailFromRoute])
+    }, [emailFromRoute, isSettings, setProfile, hydrateFromProfile])
+  )
 
   const handleUploadPhoto = async () => {
     const result = await pickImage()
@@ -98,6 +122,10 @@ export default function ProviderProfileScreen() {
     }
     if (!businessAddress.trim()) {
       setError('Business address is required.')
+      return
+    }
+    if (isGoogleMapsConfigured() && (businessLatitude == null || businessLongitude == null)) {
+      setError('Choose an address from the suggestions or use current location.')
       return
     }
     if (!phoneFormatted.trim() && !phone.trim()) {
@@ -127,6 +155,8 @@ export default function ProviderProfileScreen() {
           email: emailSaved,
           business_name: businessName.trim(),
           business_address: businessAddress.trim(),
+          business_latitude: businessLatitude,
+          business_longitude: businessLongitude,
           phone: phoneFormatted.trim() || phone.trim(),
           categories: selectedCategories,
           avatar_url: avatarUrl,
@@ -144,9 +174,13 @@ export default function ProviderProfileScreen() {
         full_name: prev?.full_name ?? null,
         avatar_url: avatarUrl,
         address: prev?.address ?? null,
+        latitude: prev?.latitude ?? null,
+        longitude: prev?.longitude ?? null,
         phone: phoneFormatted.trim() || phone.trim() || null,
         business_name: businessName.trim(),
         business_address: businessAddress.trim(),
+        business_latitude: businessLatitude,
+        business_longitude: businessLongitude,
         categories: selectedCategories,
         created_at: prev?.created_at,
         updated_at: updatedAt,
@@ -233,21 +267,24 @@ export default function ProviderProfileScreen() {
               inputFieldBg={isDark ? colors.requestBtnBg : colors.requestBtnBg}
               editable={false}
             />
-            <AuthInput
-              type="text"
-              label="Business Address*"
-              placeholder="Enter here"
-              value={businessAddress}
-              onChangeText={setBusinessAddress}
-              placeholderTextColor={palette.timerIconColor}
-              inputFieldBg={isDark ? colors.requestBtnBg : colors.inputFieldBg}
-              rightIcon={
-                <LocationPin
-                  width={20}
-                  height={20}
-                  color={colors.textSecondary}
-                />
-              }
+            <RecipientLocationField
+              address={businessAddress}
+              onAddressChange={setBusinessAddress}
+              onCoordinatesCleared={() => {
+                setBusinessLatitude(null)
+                setBusinessLongitude(null)
+              }}
+              onLocationResolved={({ address: next, lat, lng }) => {
+                setBusinessAddress(next)
+                setBusinessLatitude(lat)
+                setBusinessLongitude(lng)
+              }}
+              hasResolvedCoordinates={businessLatitude != null && businessLongitude != null}
+              fieldLabel="Business Address*"
+              placeholderWhenMaps="Search for your business address"
+              placeholderFallback="Enter business address"
+              hintResolved="Business location saved with map coordinates."
+              hintPickSuggestion="Pick a suggestion or use current location for your business."
             />
             <View style={styles.phoneField}>
               <Text
@@ -263,8 +300,9 @@ export default function ProviderProfileScreen() {
                 Phone #*
               </Text>
               <PhoneInput
+                key={phoneInputKey}
                 ref={phoneInputRef}
-                defaultCode="PK"
+                defaultCode={phoneCountryIso}
                 placeholder="3435234561"
                 value={phone}
                 onChangeText={setPhone}

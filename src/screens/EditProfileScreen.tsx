@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react'
 import { StyleSheet, Text, View, ScrollView } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useThemeStore } from '../../store/themeStore'
-import { getColors, palette } from '../../utils/colors'
+import { getColors } from '../../utils/colors'
 import { useAppFontSizes } from '../../theme/fonts'
 import { fontFamilies } from '../../theme/typography'
 import { AuthInput } from '../components/AuthInput'
 import ContinueButton from '../components/ContinueButton'
 import { ProfilePictureUploader } from '../components/ProfilePictureUploader'
-import LocationPin from '../assets/svgs/LocationPin'
+import { RecipientLocationField } from '../components/RecipientLocationField'
+import { isGoogleMapsConfigured } from '../lib/googleMaps'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack'
 import { RootStackParamList } from '../navigations/RootNavigation'
@@ -30,6 +31,8 @@ const EditProfileScreen = ({ route }: Props) => {
   const profile = useAuthStore((s) => s.profile)
   const [fullName, setFullName] = useState('')
   const [address, setAddress] = useState('')
+  const [latitude, setLatitude] = useState<number | null>(null)
+  const [longitude, setLongitude] = useState<number | null>(null)
   const [profileImageUri, setProfileImageUri] = useState<string | null>(null)
   const [profileImageBase64, setProfileImageBase64] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -42,6 +45,8 @@ const EditProfileScreen = ({ route }: Props) => {
       if (p && p.role === 'recipient') {
         if (p.full_name) setFullName(p.full_name)
         if (p.address) setAddress(p.address)
+        setLatitude(p.latitude ?? null)
+        setLongitude(p.longitude ?? null)
         if (p.avatar_url) setProfileImageUri(p.avatar_url)
         return
       }
@@ -52,6 +57,8 @@ const EditProfileScreen = ({ route }: Props) => {
           setProfile(fetched)
           if (fetched.full_name) setFullName(fetched.full_name)
           if (fetched.address) setAddress(fetched.address)
+          setLatitude(fetched.latitude ?? null)
+          setLongitude(fetched.longitude ?? null)
           if (fetched.avatar_url) setProfileImageUri(fetched.avatar_url)
         }
       }
@@ -77,6 +84,10 @@ const EditProfileScreen = ({ route }: Props) => {
       setError('Address is required.')
       return
     }
+    if (isGoogleMapsConfigured() && (latitude == null || longitude == null)) {
+      setError('Choose an address from the suggestions or use current location.')
+      return
+    }
     setError('')
     setSubmitting(true)
     try {
@@ -99,6 +110,8 @@ const EditProfileScreen = ({ route }: Props) => {
           email: emailValue,
           full_name: fullName.trim(),
           address: address.trim(),
+          latitude,
+          longitude,
           avatar_url: avatarUrl,
           updated_at: updatedAt,
         })
@@ -114,10 +127,14 @@ const EditProfileScreen = ({ route }: Props) => {
         full_name: fullName.trim(),
         avatar_url: avatarUrl,
         address: address.trim(),
+        latitude,
+        longitude,
         phone: null,
-        business_name: null,
-        business_address: null,
-        categories: [],
+        business_name: profile?.business_name ?? null,
+        business_address: profile?.business_address ?? null,
+        business_latitude: profile?.business_latitude ?? null,
+        business_longitude: profile?.business_longitude ?? null,
+        categories: profile?.categories ?? [],
         created_at: profile?.created_at,
         updated_at: updatedAt,
       })
@@ -203,21 +220,19 @@ const EditProfileScreen = ({ route }: Props) => {
               inputFieldBg={isDark ? colors.requestBtnBg : colors.inputFieldBg}
               style={{ color: colors.textSecondary }}
             />
-            <AuthInput
-              type="text"
-              label="Address*"
-              placeholder="Enter your address"
-              value={address}
-              onChangeText={setAddress}
-              placeholderTextColor={palette.timerIconColor}
-              inputFieldBg={isDark ? colors.requestBtnBg : colors.inputFieldBg}
-              rightIcon={
-                <LocationPin
-                  width={20}
-                  height={20}
-                  color={colors.textSecondary}
-                />
-              }
+            <RecipientLocationField
+              address={address}
+              onAddressChange={setAddress}
+              onCoordinatesCleared={() => {
+                setLatitude(null)
+                setLongitude(null)
+              }}
+              onLocationResolved={({ address: next, lat, lng }) => {
+                setAddress(next)
+                setLatitude(lat)
+                setLongitude(lng)
+              }}
+              hasResolvedCoordinates={latitude != null && longitude != null}
             />
           </View>
 

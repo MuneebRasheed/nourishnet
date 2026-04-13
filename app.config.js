@@ -44,6 +44,15 @@ const infoPlistWithGoogleScheme = hasGoogleScheme
       ],
     };
 
+/** Required on iOS or location APIs crash before the permission dialog (expo-location). */
+const LOCATION_WHEN_IN_USE =
+  'NourishNet uses your location to fill in your profile address when you choose Use current location.';
+
+const infoPlistFinal = {
+  ...infoPlistWithGoogleScheme,
+  NSLocationWhenInUseUsageDescription: LOCATION_WHEN_IN_USE,
+};
+
 const extraEasProjectId =
   process.env.EXPO_PUBLIC_EAS_PROJECT_ID || appJson.expo.extra?.eas?.projectId;
 
@@ -53,7 +62,7 @@ module.exports = {
     ios: {
       ...appJson.expo.ios,
       usesAppleSignIn: true,
-      infoPlist: infoPlistWithGoogleScheme,
+      infoPlist: infoPlistFinal,
     },
     plugins,
     extra: {

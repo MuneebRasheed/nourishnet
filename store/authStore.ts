@@ -11,9 +11,15 @@ export type Profile = {
   full_name: string | null;
   avatar_url: string | null;
   address: string | null;
+  /** Recipient home / search area (Google Places or GPS); optional for older persisted sessions */
+  latitude?: number | null;
+  longitude?: number | null;
   phone: string | null;
   business_name: string | null;
   business_address: string | null;
+  /** Provider business / pickup location (Places or GPS) */
+  business_latitude?: number | null;
+  business_longitude?: number | null;
   categories: string[];
   created_at?: string;
   updated_at?: string;

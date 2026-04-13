@@ -38,6 +38,12 @@
           "photosPermission": "NourishNet needs access to your photo library so you can choose a profile or listing image.",
           "cameraPermission": "NourishNet can use the camera if you take a new photo for your profile or listing."
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "NourishNet uses your location to fill in your profile address when you choose “Use current location”."
+        }
       ]
     ],
         "extra": {

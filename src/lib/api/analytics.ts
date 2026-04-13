@@ -32,20 +32,32 @@ function buildCalendarYearMonths() {
   return months;
 }
 
+function calendarDayKey(d: Date): string {
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+/**
+ * Longest run of consecutive local calendar days with ≥1 impact event,
+ * ending on the **most recent** day you have activity (not necessarily today).
+ *
+ * The previous version started from *today* only, so missing activity “today”
+ * always showed 0 even if you picked up yesterday and the day before.
+ */
 function computeStreakDays(dates: string[]): number {
   if (dates.length === 0) return 0;
-  const daySet = new Set(
-    dates.map((iso) => {
-      const d = new Date(iso);
-      return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-    })
-  );
+  const daySet = new Set(dates.map((iso) => calendarDayKey(new Date(iso))));
 
+  let latest: Date | null = null;
+  for (const iso of dates) {
+    const d = new Date(iso);
+    if (!latest || d.getTime() > latest.getTime()) latest = d;
+  }
+  if (!latest) return 0;
+
+  const cur = new Date(latest.getFullYear(), latest.getMonth(), latest.getDate());
   let streak = 0;
-  const cur = new Date();
   while (true) {
-    const k = `${cur.getFullYear()}-${cur.getMonth()}-${cur.getDate()}`;
-    if (!daySet.has(k)) break;
+    if (!daySet.has(calendarDayKey(cur))) break;
     streak += 1;
     cur.setDate(cur.getDate() - 1);
   }
