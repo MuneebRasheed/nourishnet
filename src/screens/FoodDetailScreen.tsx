@@ -33,6 +33,7 @@ import {
   requestClaimApi,
   verifyPickupPinApi,
   fetchMyRequestStatusForListing,
+  fetchRecipientPickupVerifiedForListing,
   type RecipientRequestStatus,
 } from '../lib/api/listings';
 
@@ -67,10 +68,12 @@ function FoodDetailScreen() {
   const [serverRequestStatus, setServerRequestStatus] = useState<RecipientRequestStatus | 'none'>('none');
   const [showVerifyPickupModal, setShowVerifyPickupModal] = useState(false);
   const [showPickupVerifiedModal, setShowPickupVerifiedModal] = useState(false);
+  const [pickupVerified, setPickupVerified] = useState(false);
 
   useEffect(() => {
     setRequestLoaded(false);
     setServerRequestStatus('none');
+    setPickupVerified(false);
   }, [item?.id]);
 
   useFocusEffect(
@@ -78,14 +81,31 @@ function FoodDetailScreen() {
       if (!item?.id) return undefined;
       let cancelled = false;
       (async () => {
-        const { status, error } = await fetchMyRequestStatusForListing(item.id);
+        const listingId = item.id;
+        const verifiedRes = await fetchRecipientPickupVerifiedForListing(listingId);
         if (cancelled) return;
-        if (!error) {
-          setServerRequestStatus(status);
-          const store = useRequestedListingsStore.getState();
-          if (status === 'none') store.removeRequestedId(item.id);
-          else store.addRequestedId(item.id);
+        setPickupVerified(verifiedRes.verified);
+        let { status, error } = await fetchMyRequestStatusForListing(listingId);
+        if (cancelled) return;
+        if (error) {
+          setRequestLoaded(true);
+          return;
         }
+        // GET can briefly return `none` right after POST; avoid clearing optimistic `addRequestedId`.
+        if (
+          status === 'none' &&
+          useRequestedListingsStore.getState().isRequested(listingId)
+        ) {
+          await new Promise((r) => setTimeout(r, 450));
+          if (cancelled) return;
+          const retry = await fetchMyRequestStatusForListing(listingId);
+          if (cancelled) return;
+          if (!retry.error) status = retry.status;
+        }
+        setServerRequestStatus(status);
+        const store = useRequestedListingsStore.getState();
+        if (status === 'none') store.removeRequestedId(listingId);
+        else store.addRequestedId(listingId);
         setRequestLoaded(true);
       })();
       return () => {
@@ -120,6 +140,7 @@ function FoodDetailScreen() {
       Alert.alert('Invalid PIN', error);
       return;
     }
+    setPickupVerified(true);
     closeVerifyPickupModal();
     setShowPickupVerifiedModal(true);
   };
@@ -380,7 +401,29 @@ function FoodDetailScreen() {
             </View>
           )}
 
-          {displayRequestState === 'won' && (
+          {displayRequestState === 'won' && pickupVerified && (
+            <View style={[styles.pickupCompleteBanner, { backgroundColor: colors.inputFieldBg, borderColor: colors.borderColor }]}>
+              <Ionicons name="checkmark-circle" size={22} color={colors.primary} />
+              <Text
+                style={[
+                  styles.pickupCompleteText,
+                  { color: colors.text, fontFamily: fontFamilies.interSemiBold, fontSize: fonts.body },
+                ]}
+              >
+                Request complete
+              </Text>
+              <Text
+                style={[
+                  styles.pickupCompleteSubtext,
+                  { color: colors.textSecondary, fontFamily: fontFamilies.inter, fontSize: fonts.caption },
+                ]}
+              >
+                You already completed this pickup.
+              </Text>
+            </View>
+          )}
+
+          {displayRequestState === 'won' && !pickupVerified && (
             <View style={styles.pinQrRow}>
               <ContinueButton
                 label="Pin Code"
@@ -621,6 +664,21 @@ const styles = StyleSheet.create({
   },
   pinQrBtn: {
     flex: 1,
+  },
+  pickupCompleteBanner: {
+    marginTop: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    gap: 4,
+  },
+  pickupCompleteText: {
+    textAlign: 'center',
+  },
+  pickupCompleteSubtext: {
+    textAlign: 'center',
   },
   requestStatusLoading: {
     alignItems: 'center',

@@ -136,6 +136,50 @@ export async function fetchListingsApi(status?: 'active' | 'completed'): Promise
   return { listings };
 }
 
+/** Integer from `quantity` string (digits only), same idea as pickup decrement in DB. */
+export function parseListingQuantityInt(quantity: string | undefined | null): number {
+  const digits = String(quantity ?? '').replace(/[^0-9]/g, '');
+  if (!digits) return 0;
+  return parseInt(digits, 10) || 0;
+}
+
+const LISTING_STATUSES_OPEN_FOR_COMPLETION: ProviderListing['status'][] = ['active', 'request_open', 'claimed'];
+
+/** True if this listing should be treated as finished (no remaining quantity). */
+export function listingHasZeroQuantity(listing: Pick<ProviderListing, 'quantity'>): boolean {
+  return parseListingQuantityInt(listing.quantity) <= 0;
+}
+
+/**
+ * PATCH each open listing with zero quantity to `completed` so recipient browse + provider Active tab stay correct.
+ */
+export async function finalizeZeroQuantityListingsOnServer(listings: ProviderListing[]): Promise<ProviderListing[]> {
+  const byId = new Map(listings.map((l) => [l.id, l]));
+  const targets = listings.filter(
+    (l) => LISTING_STATUSES_OPEN_FOR_COMPLETION.includes(l.status) && listingHasZeroQuantity(l)
+  );
+  for (const l of targets) {
+    const { listing, error } = await completeListingApi(l.id);
+    if (listing && !error) {
+      byId.set(l.id, listing);
+    } else {
+      byId.set(l.id, { ...l, status: 'completed' });
+    }
+  }
+  return listings.map((l) => byId.get(l.id) ?? l);
+}
+
+/** Fetches provider listings then completes any with quantity 0 that are still open. */
+export async function fetchProviderListingsWithZeroQuantityResolved(): Promise<{
+  listings: ProviderListing[];
+  error?: string;
+}> {
+  const { listings, error } = await fetchListingsApi();
+  if (error) return { listings: [], error };
+  const normalized = await finalizeZeroQuantityListingsOnServer(listings);
+  return { listings: normalized };
+}
+
 export async function fetchBrowseListingsApi(): Promise<{ listings: ProviderListing[]; error?: string }> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE_URL}/listings/browse`, { method: 'GET', headers });
@@ -212,6 +256,42 @@ export async function verifyPickupPinApi(
   return { result: data ?? null };
 }
 
+/** True if the current user has a recorded verified pickup for this listing (durable after PIN/QR success). */
+export async function fetchRecipientPickupVerifiedForListing(
+  listingId: string
+): Promise<{ verified: boolean; error?: string }> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.id) return { verified: false };
+  const { data, error } = await supabase
+    .from('impact_events')
+    .select('id')
+    .eq('listing_id', listingId)
+    .eq('recipient_id', user.id)
+    .eq('event_type', 'pickup_verified')
+    .limit(1)
+    .maybeSingle();
+  if (error) return { verified: false, error: error.message };
+  return { verified: data != null };
+}
+
+/** Recipients who completed pickup for this listing (provider RLS: own listings’ events). */
+export async function fetchPickupVerifiedRecipientIdsForListing(
+  listingId: string
+): Promise<{ recipientIds: string[]; error?: string }> {
+  const { data, error } = await supabase
+    .from('impact_events')
+    .select('recipient_id')
+    .eq('listing_id', listingId)
+    .eq('event_type', 'pickup_verified');
+  if (error) return { recipientIds: [], error: error.message };
+  const ids = new Set<string>();
+  for (const row of data ?? []) {
+    const id = row.recipient_id as string | null | undefined;
+    if (typeof id === 'string' && id.length > 0) ids.add(id);
+  }
+  return { recipientIds: [...ids] };
+}
+
 /** Row shape returned by GET /listings/my-requests (snake_case). */
 type MyRequestRow = {
   request_id: string;
@@ -267,6 +347,32 @@ function normalizeRequestStatus(s: string): RecipientRequestStatus | null {
   return null;
 }
 
+/** Listing IDs where the current user has a recorded verified pickup (PIN/QR). */
+async function fetchPickupVerifiedListingIdsForUser(listingIds: string[]): Promise<Set<string>> {
+  const out = new Set<string>();
+  if (listingIds.length === 0) return out;
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.id) return out;
+  const { data, error } = await supabase
+    .from('impact_events')
+    .select('listing_id')
+    .eq('recipient_id', user.id)
+    .eq('event_type', 'pickup_verified')
+    .in('listing_id', listingIds);
+  if (error) return out;
+  for (const row of data ?? []) {
+    const lid = row.listing_id as string | null | undefined;
+    if (typeof lid === 'string' && lid.length > 0) out.add(lid);
+  }
+  return out;
+}
+
+function myRequestRowIsCompleted(row: MyRequestRow, pickupVerifiedListingIds: Set<string>): boolean {
+  if (pickupVerifiedListingIds.has(row.listing_id)) return true;
+  if (row.listing_status === 'completed' && row.request_status === 'won') return true;
+  return false;
+}
+
 function rowToMyRequestItem(row: MyRequestRow): MyRequestItem {
   const requestStatus = normalizeRequestStatus(row.request_status) ?? 'pending';
   return {
@@ -319,11 +425,14 @@ export async function fetchMyRequestsApi(): Promise<{
     };
   }
   const rows = (Array.isArray(data.requests) ? data.requests : []) as MyRequestRow[];
+  const uniqueListingIds = [...new Set(rows.map((r) => r.listing_id))];
+  const pickupVerifiedListingIds = await fetchPickupVerifiedListingIdsForUser(uniqueListingIds);
+
   const active: MyRequestItem[] = [];
   const completed: MyRequestItem[] = [];
   for (const row of rows) {
     const item = rowToMyRequestItem(row);
-    if (row.listing_status === 'completed') {
+    if (myRequestRowIsCompleted(row, pickupVerifiedListingIds)) {
       completed.push(item);
     } else {
       active.push(item);

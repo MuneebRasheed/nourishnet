@@ -29,8 +29,13 @@ import ArrowBACK from '../assets/svgs/ArrowBACK';
 import ArrowDown from '../assets/svgs/ArrowDown';
 import ClockICon from '../assets/svgs/ClockICon';
 import LocationPin from '../assets/svgs/LocationPin';
-import { useProviderListingsStore } from '../../store/providerListingsStore';
-import { createListingApi, updateListingApi } from '../lib/api/listings';
+import { useProviderListingsStore, type ProviderListing } from '../../store/providerListingsStore';
+import {
+  createListingApi,
+  updateListingApi,
+  finalizeZeroQuantityListingsOnServer,
+  listingHasZeroQuantity,
+} from '../lib/api/listings';
 import { supabase } from '../lib/supabase';
 import { uploadListingImage } from '../lib/uploadListingImage';
 
@@ -211,6 +216,19 @@ export default function PostPublishScreen() {
 
     setPublishing(true);
     try {
+      const persistListingInStore = async (listing: ProviderListing) => {
+        const open =
+          listing.status === 'active' ||
+          listing.status === 'request_open' ||
+          listing.status === 'claimed';
+        if (open && listingHasZeroQuantity(listing)) {
+          const [next] = await finalizeZeroQuantityListingsOnServer([listing]);
+          addListingFromApi(next);
+        } else {
+          addListingFromApi(listing);
+        }
+      };
+
       const hasNewImage = Boolean(draft.foodImageUri && draft.foodImageBase64);
       if (hasNewImage && draft.foodImageBase64) {
         const uploaded = await uploadListingImage(
@@ -232,14 +250,14 @@ export default function PostPublishScreen() {
           Alert.alert('Error', error ?? 'Failed to update listing. Please try again.');
           return;
         }
-        addListingFromApi(listing);
+        await persistListingInStore(listing);
       } else {
         const { listing, error } = await createListingApi(payload);
         if (error || !listing) {
           Alert.alert('Error', error ?? 'Failed to publish. Please try again.');
           return;
         }
-        addListingFromApi(listing);
+        await persistListingInStore(listing);
       }
       navigation.navigate('MainTabs', { screen: 'Home' });
     } catch {

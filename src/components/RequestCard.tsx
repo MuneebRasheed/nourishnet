@@ -55,6 +55,8 @@ type RequestCardProps = {
   onDecline?: () => void;
   onQRCode?: () => void;
   onPinCode?: () => void;
+  /** When true, pickup was verified for this recipient; hide PIN/QR actions. */
+  pickupComplete?: boolean;
   disabled?: boolean;
 };
 
@@ -65,6 +67,7 @@ export function RequestCard({
   onDecline,
   onQRCode,
   onPinCode,
+  pickupComplete = false,
   disabled = false,
 }: RequestCardProps) {
   const theme = useThemeStore((s) => s.theme);
@@ -115,6 +118,19 @@ export function RequestCard({
       </View>
       <View style={styles.actions}>
         {isAccepted ? (
+          pickupComplete ? (
+            <View style={[styles.pickupCompleteRow, { backgroundColor: colors.requestBtnBg, borderColor: colors.borderColor }]}>
+              <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+              <Text
+                style={[
+                  styles.pickupCompleteLabel,
+                  { color: colors.text, fontFamily: fontFamilies.interSemiBold, fontSize: fonts.subhead },
+                ]}
+              >
+                Request complete
+              </Text>
+            </View>
+          ) : (
           <>
             <Pressable
               onPress={() => {
@@ -147,6 +163,7 @@ export function RequestCard({
               </Text>
             </Pressable>
           </>
+          )
         ) : (
           <>
             <Pressable
@@ -279,4 +296,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
    
   },
+  pickupCompleteRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 100,
+    borderWidth: 1,
+  },
+  pickupCompleteLabel: {},
 });

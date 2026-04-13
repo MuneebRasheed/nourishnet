@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   Alert,
   StyleSheet,
@@ -22,7 +22,7 @@ import { ProviderImpactStatCard, ProviderImpactStatsRow } from '../components/Pr
 import { ProviderQuickActionButton, ProviderQuickActionsRow } from '../components/ProviderQuickActionButton';
 import { ProviderListingCard } from '../components/ProviderListingCard';
 import { useProviderListingsStore, type ProviderListing } from '../../store/providerListingsStore';
-import { fetchListingsApi, deleteListingApi, cancelListingApi } from '../lib/api/listings';
+import { fetchProviderListingsWithZeroQuantityResolved, deleteListingApi, cancelListingApi } from '../lib/api/listings';
 import { useAuthStore } from '../../store/authStore';
 import { getDisplayName, avatarUriWithCacheBust } from '../lib/profile';
 import { Ionicons } from '@expo/vector-icons';
@@ -30,7 +30,7 @@ import ForkKnife from '../assets/svgs/ForkKnife';
 import CheckMarkHeart from '../assets/svgs/CheckMarkHeart';
 import BoxIcon from '../assets/svgs/BoxIcon';
 import ThreelinesIcon from '../assets/svgs/ThreelinesIcon';
-import { fetchStreakTextApi } from '../lib/api/analytics';
+import { fetchAnalyticsSummaryApi } from '../lib/api/analytics';
 
 const defaultAvatar = require('../assets/images/Avatar.png');
 
@@ -50,18 +50,36 @@ export default function ProviderHomeScreen() {
   const removeListing = useProviderListingsStore((s) => s.removeListing);
   const addListingFromApi = useProviderListingsStore((s) => s.addListingFromApi);
   const [streakText, setStreakText] = useState('0-day streak');
+  const [mealsRescuedTotal, setMealsRescuedTotal] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
       (async () => {
-        const { listings: fetched, error } = await fetchListingsApi();
-        console.log('fetched', fetched);
-        if (!cancelled && !error) setListings(fetched);
+        const analyticsPromise =
+          userRole === 'provider' || userRole === 'recipient'
+            ? fetchAnalyticsSummaryApi(userRole)
+            : Promise.resolve(
+                { summary: null } as Awaited<ReturnType<typeof fetchAnalyticsSummaryApi>>
+              );
+        const [listingsRes, analyticsRes] = await Promise.all([
+          fetchProviderListingsWithZeroQuantityResolved(),
+          analyticsPromise,
+        ]);
+        if (!cancelled && !listingsRes.error) setListings(listingsRes.listings);
 
+        if (!cancelled && (userRole === 'provider' || userRole === 'recipient')) {
+          if (analyticsRes.summary) {
+            setStreakText(`${analyticsRes.summary.streakDays}-day streak`);
+            setMealsRescuedTotal(analyticsRes.summary.meals);
+          } else {
+            setStreakText('0-day streak');
+            setMealsRescuedTotal(0);
+          }
+        }
       })();
       return () => { cancelled = true; };
-    }, [setListings])
+    }, [setListings, userRole])
   );
 
   const ACTIVE_LISTING_STATUSES = useMemo(
@@ -141,18 +159,6 @@ export default function ProviderHomeScreen() {
     );
   };
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (userRole !== 'provider' && userRole !== 'recipient') return;
-      const { streakText: text } = await fetchStreakTextApi(userRole);
-      if (!cancelled) setStreakText(text);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [userRole]);
-
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView
@@ -209,7 +215,7 @@ export default function ProviderHomeScreen() {
               iconBgColor={isDark ? colors.inputFieldBg : palette.roleCard}
             />
             <ProviderImpactStatCard
-              value="142"
+              value={String(mealsRescuedTotal)}
               title="Total Meals"
               label="Meals rescued"
               icon={<ForkKnife width={20} height={20} color={palette.timeIcon} />}

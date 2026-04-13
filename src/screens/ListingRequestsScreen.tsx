@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Alert, StyleSheet, Text, View, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useThemeStore } from '../../store/themeStore';
 import { getColors, palette } from '../../utils/colors';
@@ -18,13 +18,13 @@ import ClockICon from '../assets/svgs/ClockICon';
 import LocationPin from '../assets/svgs/LocationPin';
 import { supabase } from '../lib/supabase';
 import { avatarUriWithCacheBust } from '../lib/profile';
-import { generatePickupPinApi } from '../lib/api/listings';
+import { generatePickupPinApi, fetchPickupVerifiedRecipientIdsForListing } from '../lib/api/listings';
 import { PickupPinModal } from '../components/PickupPinModal';
 
 export type { ListingRequestItem };
 
 type RequestTab = 'Request' | 'Available';
-type ListingRequestWithRecipient = ListingRequestItem & { recipientId: string };
+type ListingRequestWithRecipient = ListingRequestItem & { recipientId: string; pickupComplete?: boolean };
 
 function formatTimeAgo(iso: string | null | undefined) {
   if (!iso) return 'just now';
@@ -110,7 +110,17 @@ export default function ListingRequestsScreen() {
       }
     }
 
-    const toItem = (r: { id: string; recipient_id: string; created_at: string | null }): ListingRequestWithRecipient => {
+    const { recipientIds: verifiedRecipientIds, error: verifiedErr } =
+      await fetchPickupVerifiedRecipientIdsForListing(listingId);
+    if (verifiedErr) {
+      console.warn('[ListingRequestsScreen] fetch pickup_verified recipients', verifiedErr);
+    }
+    const verifiedRecipients = new Set(verifiedRecipientIds);
+
+    const toItem = (
+      r: { id: string; recipient_id: string; created_at: string | null },
+      forAccepted: boolean
+    ): ListingRequestWithRecipient => {
       const profile = profilesById.get(r.recipient_id);
       const displayName =
         (profile?.full_name && profile.full_name.trim().length > 0
@@ -126,17 +136,20 @@ export default function ListingRequestsScreen() {
         distance: '—',
         requestedAt: formatTimeAgo(r.created_at),
         priority: 'medium' as const,
+        pickupComplete: forAccepted && verifiedRecipients.has(r.recipient_id),
       };
     };
 
-    setPendingRequests(rows.filter((r) => r.status === 'pending').map(toItem));
-    setAcceptedRequests(rows.filter((r) => r.status === 'won').map(toItem));
+    setPendingRequests(rows.filter((r) => r.status === 'pending').map((r) => toItem(r, false)));
+    setAcceptedRequests(rows.filter((r) => r.status === 'won').map((r) => toItem(r, true)));
     setIsRefreshing(false);
   }, [listingId]);
 
-  useEffect(() => {
-    fetchRequests();
-  }, [fetchRequests]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchRequests();
+    }, [fetchRequests])
+  );
 
   const handleBack = () => {
     if (navigation.canGoBack()) navigation.goBack();
@@ -473,6 +486,7 @@ export default function ListingRequestsScreen() {
                 key={req.id}
                 item={req}
                 variant="accepted"
+                pickupComplete={req.pickupComplete}
                 onQRCode={() => handleQRCode(req.id, req.recipientId)}
                 onPinCode={() => handlePinCode(req.id, req.recipientId)}
               />

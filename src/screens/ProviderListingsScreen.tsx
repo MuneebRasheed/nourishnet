@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import {
   Alert,
   StyleSheet,
@@ -7,7 +7,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
+import { useNavigation, CompositeNavigationProp, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useThemeStore } from '../../store/themeStore';
 import { getColors, palette } from '../../utils/colors';
@@ -20,7 +20,12 @@ import ContinueButton from '../components/ContinueButton';
 import { ProviderListingCard } from '../components/ProviderListingCard';
 import { ActiveCompletedTabs, type ActiveCompletedTab } from '../components/ActiveCompletedTabs';
 import { useProviderListingsStore, type ProviderListing } from '../../store/providerListingsStore';
-import { deleteListingApi, cancelListingApi, activateListingApi } from '../lib/api/listings';
+import {
+  deleteListingApi,
+  cancelListingApi,
+  activateListingApi,
+  fetchProviderListingsWithZeroQuantityResolved,
+} from '../lib/api/listings';
 import { Ionicons } from '@expo/vector-icons';
 import BoxIcon from '../assets/svgs/BoxIcon';
 import SettingsHeader from '../components/SettingsHeader';
@@ -38,9 +43,23 @@ export default function ProviderListingsScreen() {
   const fonts = useAppFontSizes();
   const insets = useSafeAreaInsets();
   const allListings = useProviderListingsStore((s) => s.listings);
+  const setListings = useProviderListingsStore((s) => s.setListings);
   const removeListing = useProviderListingsStore((s) => s.removeListing);
   const addListingFromApi = useProviderListingsStore((s) => s.addListingFromApi);
   const [activeTab, setActiveTab] = useState<ActiveCompletedTab>('Active');
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      (async () => {
+        const { listings, error } = await fetchProviderListingsWithZeroQuantityResolved();
+        if (!cancelled && !error) setListings(listings);
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [setListings])
+  );
   type ListingsNav = NativeStackNavigationProp<ListingsStackParamList, 'ProviderListingsScreen'>;
 type RootNav = NativeStackNavigationProp<RootStackParamList, keyof RootStackParamList>;
 const navigation = useNavigation<CompositeNavigationProp<ListingsNav, RootNav>>();

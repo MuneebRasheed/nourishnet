@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import {
   StyleSheet,
   Text,
@@ -26,27 +26,6 @@ export function PickupPinModal({ visible, pin, onClose }: PickupPinModalProps) {
   const isDark = theme === 'dark';
   const colors = getColors(isDark);
   const fonts = useAppFontSizes();
-  const [secondsLeft, setSecondsLeft] = useState(10);
-
-  useEffect(() => {
-    if (!visible) {
-      setSecondsLeft(10);
-      return;
-    }
-
-    setSecondsLeft(10);
-    const interval = setInterval(() => {
-      setSecondsLeft((prev) => Math.max(0, prev - 1));
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [visible, onClose]);
-
-  useEffect(() => {
-    if (!visible) return;
-    if (secondsLeft > 0) return;
-    onClose();
-  }, [secondsLeft, visible, onClose]);
 
   if (!visible) return null;
 
@@ -123,7 +102,7 @@ export function PickupPinModal({ visible, pin, onClose }: PickupPinModalProps) {
               },
             ]}
           >
-            This PIN may only be shown once and will hide in {secondsLeft}s.
+            This PIN is for pickup verification only. Tap OK when you are done.
           </Text>
           <ContinueButton
             label="OK"

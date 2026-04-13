@@ -1,7 +1,7 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { StyleSheet, Text, View, ScrollView, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
@@ -11,7 +11,7 @@ import { useAppFontSizes } from '../../theme/fonts';
 import { fontFamilies } from '../../theme/typography';
 import { RootStackParamList } from '../navigations/RootNavigation';
 import type { ProviderListing } from '../../store/providerListingsStore';
-import { fetchBrowseListingsApi } from '../lib/api/listings';
+import { fetchBrowseListingsApi, fetchMyRequestsApi } from '../lib/api/listings';
 import HomeHeader from '../components/HomeHeader';
 import SearchBarWithFilter from '../components/SearchBarWithFilter';
 import FilterModal, {
@@ -105,26 +105,35 @@ export default function HomeScreen() {
   const userRole = useAuthStore((s) => s.userRole);
   const homeHeaderAvatarUri = avatarUriWithCacheBust(profile?.avatar_url, profile?.updated_at);
   const [browseListings, setBrowseListings] = useState<ProviderListing[]>([]);
+  /** Listing ids the current user already finished (same bucket as My Requests → Completed). Hidden from this recipient’s home feed. */
+  const [recipientCompletedListingIds, setRecipientCompletedListingIds] = useState<Set<string>>(
+    () => new Set()
+  );
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [streakText, setStreakText] = useState('0-day streak');
-
-  const fetchListings = async () => {
-    const { listings, error } = await fetchBrowseListingsApi();
-    setBrowseListings(error ? [] : listings);
-  };
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const { listings, error } = await fetchBrowseListingsApi();
-      if (!cancelled) {
-        setBrowseListings(error ? [] : listings);
-        setLoading(false);
+      const [browseRes, myRes] = await Promise.all([
+        fetchBrowseListingsApi(),
+        fetchMyRequestsApi(),
+      ]);
+      if (cancelled) return;
+      setBrowseListings(browseRes.error ? [] : browseRes.listings);
+      if (!myRes.error) {
+        useRequestedListingsStore.getState().setRequestedIds(myRes.active.map((r) => r.id));
+        setRecipientCompletedListingIds(new Set(myRes.completed.map((r) => r.id)));
+      } else {
+        setRecipientCompletedListingIds(new Set());
       }
+      setLoading(false);
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -141,7 +150,15 @@ export default function HomeScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchListings();
+    const [browseRes, myRes] = await Promise.all([
+      fetchBrowseListingsApi(),
+      fetchMyRequestsApi(),
+    ]);
+    setBrowseListings(browseRes.error ? [] : browseRes.listings);
+    if (!myRes.error) {
+      setRequestedIds(myRes.active.map((r) => r.id));
+      setRecipientCompletedListingIds(new Set(myRes.completed.map((r) => r.id)));
+    }
     setRefreshing(false);
   };
 
@@ -159,11 +176,12 @@ export default function HomeScreen() {
     // Do not fall back to locally persisted provider listings, to avoid showing stale/mock data.
     const seen = new Set<string>();
     return activeListings.filter((l) => {
+      if (recipientCompletedListingIds.has(l.id)) return false;
       if (seen.has(l.id)) return false;
       seen.add(l.id);
       return true;
     });
-  }, [activeListings]);
+  }, [activeListings, recipientCompletedListingIds]);
   const listingItems = useMemo(
     () => mergedActiveListings.map(providerListingToDetailItem),
     [mergedActiveListings]
@@ -229,7 +247,23 @@ export default function HomeScreen() {
   }, [baseList, search, category, appliedFilters]);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const requestedIds = useRequestedListingsStore((s) => s.requestedIds);
+  const setRequestedIds = useRequestedListingsStore((s) => s.setRequestedIds);
   const isRequested = (id: string) => requestedIds.has(id);
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      (async () => {
+        const { active, completed, error } = await fetchMyRequestsApi();
+        if (cancelled || error) return;
+        setRequestedIds(active.map((r) => r.id));
+        setRecipientCompletedListingIds(new Set(completed.map((r) => r.id)));
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [setRequestedIds])
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>

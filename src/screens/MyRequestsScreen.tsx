@@ -50,7 +50,7 @@ export default function MyRequestsScreen() {
     }
     setActiveRequests(active);
     setCompletedRequests(completed);
-    setRequestedIds([...active, ...completed].map((r) => r.id));
+    setRequestedIds(active.map((r) => r.id));
   }, [setRequestedIds]);
 
   useFocusEffect(
