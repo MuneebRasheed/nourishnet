@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeStore } from '../../store/themeStore';
 import { getColors, palette } from '../../utils/colors';
@@ -13,6 +13,10 @@ import HeartTabFill from '../assets/svgs/HeartTabFill';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigations/SearchNavigationStack';
+import { supabase } from '../lib/supabase';
+import { useAuthStore } from '../../store/authStore';
+import { fetchProfile } from '../lib/profile';
+import { getLocalDayEndIsoTimestamptz } from '../lib/demandPulseVisibility';
 
 export default function SearchTabScreenMain() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -22,9 +26,40 @@ export default function SearchTabScreenMain() {
   const fonts = useAppFontSizes();
   const insets = useSafeAreaInsets();
   const [selectedPreferences, setSelectedPreferences] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
 
-  const handleNeedFoodToday = () => {
-    navigation.navigate('SearchTabScreen');
+  const hasAtLeastOnePreference = selectedPreferences.length >= 1;
+
+  const handleNeedFoodToday = async () => {
+    if (!hasAtLeastOnePreference) return;
+    setSaving(true);
+    try {
+      const {
+        data: { user },
+        error: userErr,
+      } = await supabase.auth.getUser();
+      if (userErr || !user?.id) {
+        Alert.alert('Unable to continue', userErr?.message ?? 'Not signed in.');
+        return;
+      }
+      const foodTypes = selectedPreferences.slice(0, 2);
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          demand_pulse_expires_at: getLocalDayEndIsoTimestamptz(),
+          demand_pulse_food_types: foodTypes,
+        })
+        .eq('id', user.id);
+      if (error) {
+        Alert.alert('Could not save', error.message ?? 'Update failed.');
+        return;
+      }
+      const updated = await fetchProfile(user.id);
+      if (updated) useAuthStore.getState().setProfile(updated);
+      navigation.navigate('SearchTabScreen', { fromActivation: true });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -65,7 +100,7 @@ export default function SearchTabScreenMain() {
               },
             ]}
           >
-            Tap below to let nearby donors know. No explanation needed.
+            Tap below to let nearby donors know.
           </Text>
           <Text
             style={[
@@ -77,7 +112,7 @@ export default function SearchTabScreenMain() {
               },
             ]}
           >
-            Optional — pick up to 2 preferences
+            Pick at least 1 food type (required). You can add upto 2 preferences  for match listings.
           </Text>
           <View style={styles.chipsWrap}>
             <PreferenceChips
@@ -86,14 +121,19 @@ export default function SearchTabScreenMain() {
             />
           </View>
           <View style={styles.buttonWrap}>
-            <ContinueButton
-              label="I Need Food Today"
-              onPress={handleNeedFoodToday}
-              isDark={isDark}
-              icon={<HeartTabFill width={20} height={20} color={palette.white} />}
-              iconPosition="left"
-              style={styles.primaryButton}
-            />
+            {saving ? (
+              <ActivityIndicator size="large" color={colors.primary} />
+            ) : (
+              <ContinueButton
+                label="I Need Food Today"
+                onPress={handleNeedFoodToday}
+                isDark={isDark}
+                disabled={!hasAtLeastOnePreference}
+                icon={<HeartTabFill width={20} height={20} color={palette.white} />}
+                iconPosition="left"
+                style={styles.primaryButton}
+              />
+            )}
           </View>
           <Text
             style={[
@@ -161,6 +201,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     alignItems: 'center',
     marginTop: 8,
+    minHeight: 52,
+    justifyContent: 'center',
   },
   primaryButton: {
     width: '100%',

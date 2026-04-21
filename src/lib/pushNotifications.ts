@@ -56,14 +56,22 @@ export async function clearExpoPushTokenFromProfile(userId: string): Promise<voi
   }
 }
 
+async function ensureAndroidDefaultChannel(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  await Notifications.setNotificationChannelAsync('default', {
+    name: 'default',
+    importance: Notifications.AndroidImportance.MAX,
+    vibrationPattern: [0, 250, 250, 250],
+  });
+}
+
 /**
- * iOS only: requests permission, resolves Expo push token, stores on `profiles`.
- * No-op on non-iOS or simulator (remote push requires a physical device + dev build).
+ * Registers for remote push (Expo), requests permission, stores token on `profiles`.
+ * Physical device only; simulators/emulators are skipped.
  */
-export async function registerIosPushTokenIfNeeded(): Promise<void> {
-  if (Platform.OS !== 'ios') return;
+export async function registerExpoPushTokenIfNeeded(): Promise<void> {
   if (!Device.isDevice) {
-    console.warn('[push] Expo push token requires a physical iOS device');
+    console.warn('[push] Expo push token requires a physical device');
     return;
   }
 
@@ -77,6 +85,8 @@ export async function registerIosPushTokenIfNeeded(): Promise<void> {
 
   const userId = await getCurrentUserId();
   if (!userId) return;
+
+  await ensureAndroidDefaultChannel();
 
   const { status: existing } = await Notifications.getPermissionsAsync();
   const { status } =
@@ -94,3 +104,6 @@ export async function registerIosPushTokenIfNeeded(): Promise<void> {
 
   await saveExpoPushTokenToProfile(userId, token);
 }
+
+/** @deprecated Use `registerExpoPushTokenIfNeeded` */
+export const registerIosPushTokenIfNeeded = registerExpoPushTokenIfNeeded;

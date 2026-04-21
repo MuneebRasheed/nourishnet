@@ -5,9 +5,9 @@ import ListingRequestsScreen from '../screens/ListingRequestsScreen';
 
 /** Root stack route names and params. Use this type for useNavigation<> in screens. */
 export type RootStackParamList = {
-    SearchTabScreenMain: undefined;
-    SearchTabScreen: undefined;
-    ListingRequestsScreen: { listingId: string; listingTitle: string };
+  SearchTabScreenMain: undefined;
+  SearchTabScreen: { fromActivation?: boolean } | undefined;
+  ListingRequestsScreen: { listingId: string; listingTitle: string };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();

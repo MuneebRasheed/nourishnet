@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Alert,
+  ActivityIndicator,
   StyleSheet,
   Text,
   View,
@@ -10,11 +11,11 @@ import {
   Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import { useThemeStore } from '../../store/themeStore';
-import { getColors } from '../../utils/colors';
+import { getColors, palette } from '../../utils/colors';
 import { useAppFontSizes } from '../../theme/fonts';
 import { fontFamilies } from '../../theme/typography';
 import { RootStackParamList } from '../navigations/RootNavigation';
@@ -25,8 +26,16 @@ import { AuthInput } from '../components/AuthInput';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import ArrowBACK from '../assets/svgs/ArrowBACK';
 import { pickListingImage } from '../lib/uploadListingImage';
-
-const FOOD_TYPES = ['Prepared Meals', 'Baked Goods', 'Produce', 'Dairy', 'Pantry', 'Other'];
+import { FOOD_TYPES } from '../constants/foodTypes';
+import {
+  createListingApi,
+  fetchListingsApi,
+  finalizeZeroQuantityListingsOnServer,
+  listingHasZeroQuantity,
+} from '../lib/api/listings';
+import { findMostRecentListingForRepost } from '../lib/repostFromPrevious';
+import { supabase } from '../lib/supabase';
+import { useProviderListingsStore, type ProviderListing, type ProviderListingDraft } from '../../store/providerListingsStore';
 const QUANTITY_UNITS = ['Bags', 'Portions', 'Pounds', 'Kilos', 'Servings', 'Items'];
 const DIETARY_TAGS = ['Vegetarian', 'Vegan', 'Dairy-Free', 'Gluten-Free', 'Halal', 'Kosher', 'Nut-Free'];
 const ALLERGENS = ['None', 'Gluten', 'Dairy', 'Eggs', 'Nuts', 'Peanuts', 'Shellfish', 'Fish', 'Sesame', 'Soy'];
@@ -52,38 +61,174 @@ export default function PostFoodScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'PostFoodScreen'>>();
   const editListing = route.params?.editListing;
+  const repostFromListing = route.params?.repostFromListing;
+  /** Edit takes precedence; otherwise duplicate-from-previous template (still creates a new listing). */
+  const templateListing = editListing ?? repostFromListing;
 
-  const [foodType, setFoodType] = useState<string | null>(editListing?.foodType ?? null);
-  const [quantity, setQuantity] = useState(editListing?.quantity ?? '');
+  const initialTemplate = route.params?.editListing ?? route.params?.repostFromListing;
+  const initialQuantity =
+    initialTemplate == null
+      ? ''
+      : route.params?.editListing
+        ? (initialTemplate.quantity ?? '')
+        : (initialTemplate.totalQuantity?.trim() ||
+            initialTemplate.quantity ||
+            '').trim() ||
+          (initialTemplate.quantity ?? '');
+
+  const [foodType, setFoodType] = useState<string | null>(templateListing?.foodType ?? null);
+  const [quantity, setQuantity] = useState(initialQuantity);
   const [quantityUnit, setQuantityUnit] = useState<string>(
-    editListing?.quantityUnit && QUANTITY_UNITS.includes(editListing.quantityUnit)
-      ? editListing.quantityUnit
+    templateListing?.quantityUnit && QUANTITY_UNITS.includes(templateListing.quantityUnit)
+      ? templateListing.quantityUnit
       : QUANTITY_UNITS[0]
   );
-  const [foodTitle, setFoodTitle] = useState(editListing?.title ?? '');
-  const [foodImageUri, setFoodImageUri] = useState<string | null>(editListing?.imageUrl ?? null);
+  const [foodTitle, setFoodTitle] = useState(templateListing?.title ?? '');
+  const [foodImageUri, setFoodImageUri] = useState<string | null>(templateListing?.imageUrl ?? null);
   const [foodImageBase64, setFoodImageBase64] = useState<string | null>(null);
   const [foodImageMimeType, setFoodImageMimeType] = useState<string | null>(null);
-  const [dietarySelected, setDietarySelected] = useState<string[]>(editListing?.dietaryTags ?? []);
-  const [allergensSelected, setAllergensSelected] = useState<string[]>(editListing?.allergens ?? []);
+  const [dietarySelected, setDietarySelected] = useState<string[]>(templateListing?.dietaryTags ?? []);
+  const [allergensSelected, setAllergensSelected] = useState<string[]>(templateListing?.allergens ?? []);
   const [showFoodTypeOptions, setShowFoodTypeOptions] = useState(false);
   const [showQuantityUnitOptions, setShowQuantityUnitOptions] = useState(false);
+  const [previousRepostLoading, setPreviousRepostLoading] = useState(false);
+  const [hasPriorListing, setHasPriorListing] = useState(false);
+
+  const addListingFromApi = useProviderListingsStore((s) => s.addListingFromApi);
+
+  const persistListingFromApi = async (listing: ProviderListing) => {
+    const open =
+      listing.status === 'active' ||
+      listing.status === 'request_open' ||
+      listing.status === 'claimed';
+    if (open && listingHasZeroQuantity(listing)) {
+      const [next] = await finalizeZeroQuantityListingsOnServer([listing]);
+      addListingFromApi(next);
+    } else {
+      addListingFromApi(listing);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      if (editListing) {
+        setHasPriorListing(false);
+        return () => {
+          cancelled = true;
+        };
+      }
+      (async () => {
+        const { listings, error } = await fetchListingsApi();
+        if (cancelled) return;
+        if (error) {
+          setHasPriorListing(false);
+          return;
+        }
+        const usable = listings.filter((l) => l.status !== 'cancelled');
+        setHasPriorListing(usable.length >= 1);
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [editListing])
+  );
+
+  const handleOneTapRepostFromPrevious = async () => {
+    if (editListing || previousRepostLoading || !hasPriorListing) return;
+    setPreviousRepostLoading(true);
+    try {
+      const { listings, error } = await fetchListingsApi();
+      if (error) {
+        Alert.alert('Could not load your posts', error);
+        return;
+      }
+      const source = findMostRecentListingForRepost(listings);
+      if (!source) {
+        Alert.alert(
+          'No previous post',
+          'We could not find a listing to copy from. Create a post first, then you can re-post from previous.'
+        );
+        return;
+      }
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.user) {
+        Alert.alert('Sign in required', 'Please sign in again to publish.');
+        return;
+      }
+      if (!source.title?.trim()) {
+        Alert.alert('Cannot re-post', 'That listing is missing a title.');
+        return;
+      }
+      if (!source.pickupAddress?.trim()) {
+        Alert.alert('Cannot re-post', 'That listing is missing a pickup address.');
+        return;
+      }
+      if (!source.imageUrl?.trim()) {
+        Alert.alert(
+          'Cannot re-post',
+          'That listing has no image URL. Use the form below to post manually.'
+        );
+        return;
+      }
+
+      const repostQty =
+        (source.totalQuantity?.trim() || source.quantity || '').trim() || source.quantity;
+
+      const draftPayload: ProviderListingDraft = {
+        title: source.title,
+        foodType: source.foodType,
+        quantity: repostQty,
+        totalQuantity: repostQty,
+        quantityUnit: source.quantityUnit,
+        dietaryTags: source.dietaryTags ?? [],
+        allergens: source.allergens ?? [],
+        imageUrl: source.imageUrl,
+        pickupAddress: source.pickupAddress,
+        startTime: source.startTime,
+        endTime: source.endTime,
+        note: source.note ?? '',
+        preferenceGapSeconds: source.preferenceGapSeconds ?? null,
+      };
+
+      const { listing, error: createErr } = await createListingApi(draftPayload);
+      if (createErr || !listing) {
+        Alert.alert('Publish failed', createErr ?? 'Could not create listing.');
+        return;
+      }
+      await persistListingFromApi(listing);
+      navigation.navigate('MainTabs', { screen: 'Home' });
+    } catch {
+      Alert.alert('Error', 'Something went wrong. Please try again.');
+    } finally {
+      setPreviousRepostLoading(false);
+    }
+  };
 
   useEffect(() => {
-    if (editListing) {
-      setFoodType(editListing.foodType ?? null);
-      setQuantity(editListing.quantity ?? '');
+    if (templateListing) {
+      setFoodType(templateListing.foodType ?? null);
+      if (editListing) {
+        setQuantity(editListing.quantity ?? '');
+      } else {
+        const t = templateListing;
+        setQuantity(
+          (t.totalQuantity?.trim() || t.quantity || '').trim() || (t.quantity ?? '')
+        );
+      }
       setQuantityUnit(
-        editListing.quantityUnit && QUANTITY_UNITS.includes(editListing.quantityUnit)
-          ? editListing.quantityUnit
+        templateListing.quantityUnit && QUANTITY_UNITS.includes(templateListing.quantityUnit)
+          ? templateListing.quantityUnit
           : QUANTITY_UNITS[0]
       );
-      setFoodTitle(editListing.title ?? '');
-      setFoodImageUri(editListing.imageUrl ?? null);
+      setFoodTitle(templateListing.title ?? '');
+      setFoodImageUri(templateListing.imageUrl ?? null);
       setFoodImageBase64(null);
       setFoodImageMimeType(null);
-      setDietarySelected(editListing.dietaryTags ?? []);
-      setAllergensSelected(editListing.allergens ?? []);
+      setDietarySelected(templateListing.dietaryTags ?? []);
+      setAllergensSelected(templateListing.allergens ?? []);
     } else {
       setFoodType(null);
       setQuantity('');
@@ -95,7 +240,7 @@ export default function PostFoodScreen() {
       setDietarySelected([]);
       setAllergensSelected([]);
     }
-  }, [editListing]);
+  }, [templateListing, editListing]);
 
   const handleBack = () => {
     if (navigation.canGoBack()) navigation.goBack();
@@ -150,7 +295,11 @@ export default function PostFoodScreen() {
       foodImageBase64,
       foodImageMimeType,
     };
-    navigation.navigate('PostPublishScreen', { draft, editListing: editListing ?? undefined });
+    navigation.navigate('PostPublishScreen', {
+      draft,
+      editListing: editListing ?? undefined,
+      repostSourceListing: repostFromListing ?? undefined,
+    });
   };
 
   const handlePickFoodImage = async () => {
@@ -185,6 +334,32 @@ export default function PostFoodScreen() {
           showBorder={false}
         />
       </View>
+      {!editListing && hasPriorListing && (
+        <View style={[styles.repostRow, { paddingHorizontal: 16, paddingBottom: 10 }]}>
+          <TouchableOpacity
+            style={[
+              styles.repostOneTapButton,
+              { backgroundColor: colors.primary, opacity: previousRepostLoading ? 0.65 : 1 },
+            ]}
+            onPress={handleOneTapRepostFromPrevious}
+            disabled={previousRepostLoading}
+            activeOpacity={0.85}
+          >
+            {previousRepostLoading ? (
+              <ActivityIndicator color={palette.white} />
+            ) : (
+              <Text
+                style={[
+                  styles.repostOneTapText,
+                  { fontFamily: fontFamilies.interSemiBold, fontSize: fonts.subhead },
+                ]}
+              >
+                Re-post from previous (one tap)
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[
@@ -419,6 +594,22 @@ export default function PostFoodScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  repostRow: {
+    width: '100%',
+  },
+  repostOneTapButton: {
+    width: '100%',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
+  },
+  repostOneTapText: {
+    color: palette.white,
+    textAlign: 'center',
   },
   scroll: {
     flex: 1,

@@ -3,44 +3,82 @@ import { API_BASE_URL } from './client';
 import type { ProviderListing, ProviderListingDraft } from '../../../store/providerListingsStore';
 
 /** Shape returned by the server (Supabase snake_case) */
-type ApiListing = {
+export type ApiListing = {
   id: string;
   provider_id: string;
   title: string;
   food_type: string | null;
   quantity: string;
+  total_quantity?: string | null;
   quantity_unit: string;
   dietary_tags: string[];
   allergens: string[];
   image_url?: string | null;
   pickup_address: string;
+  pickup_latitude?: number | null;
+  pickup_longitude?: number | null;
   start_time: string;
   end_time: string;
   note: string;
   status: 'active' | 'request_open' | 'claimed' | 'completed' | 'cancelled';
   claim_window_ends_at?: string | null;
   claimed_by?: string | null;
+  preference_gap_seconds?: number | null;
   created_at: string;
   updated_at: string;
 };
 
-function mapApiToListing(row: ApiListing): ProviderListing {
+function numOrNull(v: unknown): number | null {
+  if (v == null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+export function mapApiToListing(row: ApiListing): ProviderListing {
   return {
     id: row.id,
     title: row.title,
     foodType: row.food_type,
-    quantity: row.quantity ?? '',
+    quantity: row.quantity != null ? String(row.quantity) : '',
+    totalQuantity:
+      row.total_quantity != null && String(row.total_quantity).trim() !== ''
+        ? String(row.total_quantity)
+        : row.quantity != null
+          ? String(row.quantity)
+          : '',
     quantityUnit: row.quantity_unit ?? 'Portions',
     dietaryTags: row.dietary_tags ?? [],
     allergens: row.allergens ?? [],
     imageUrl: row.image_url ?? null,
     pickupAddress: row.pickup_address ?? '',
+    pickupLatitude: numOrNull(row.pickup_latitude),
+    pickupLongitude: numOrNull(row.pickup_longitude),
     startTime: row.start_time ?? '',
     endTime: row.end_time ?? '',
     note: row.note ?? '',
-    createdAt: row.created_at,
+    createdAt: row.created_at != null ? String(row.created_at) : '',
     status: row.status,
+    preferenceGapSeconds: numOrNull(row.preference_gap_seconds),
   };
+}
+
+/** Maps Realtime `payload.new` or any compatible snake_case row to `ProviderListing`. */
+export function listingRowToProviderListing(row: Record<string, unknown>): ProviderListing | null {
+  if (!row || typeof row !== 'object') return null;
+  const id = row.id;
+  const title = row.title;
+  if (typeof id !== 'string' || !id || typeof title !== 'string') return null;
+  const status = row.status;
+  if (
+    status !== 'active' &&
+    status !== 'request_open' &&
+    status !== 'claimed' &&
+    status !== 'completed' &&
+    status !== 'cancelled'
+  ) {
+    return null;
+  }
+  return mapApiToListing(row as unknown as ApiListing);
 }
 
 async function ensureListingImageUrl(
@@ -94,6 +132,7 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 
 export async function createListingApi(draft: ProviderListingDraft): Promise<{ listing: ProviderListing | null; error?: string }> {
   const headers = await getAuthHeaders();
+  const gap = draft.preferenceGapSeconds ?? null;
   const res = await fetch(`${API_BASE_URL}/listings`, {
     method: 'POST',
     headers,
@@ -101,6 +140,7 @@ export async function createListingApi(draft: ProviderListingDraft): Promise<{ l
       title: draft.title,
       foodType: draft.foodType,
       quantity: draft.quantity,
+      totalQuantity: draft.totalQuantity?.trim() ? draft.totalQuantity : draft.quantity,
       quantityUnit: draft.quantityUnit,
       dietaryTags: draft.dietaryTags,
       allergens: draft.allergens,
@@ -109,6 +149,8 @@ export async function createListingApi(draft: ProviderListingDraft): Promise<{ l
       startTime: draft.startTime,
       endTime: draft.endTime,
       note: draft.note,
+      preferenceGapSeconds: gap,
+      preference_gap_seconds: gap,
     }),
   });
   const data = await res.json().catch(() => ({}));
@@ -141,6 +183,24 @@ export function parseListingQuantityInt(quantity: string | undefined | null): nu
   const digits = String(quantity ?? '').replace(/[^0-9]/g, '');
   if (!digits) return 0;
   return parseInt(digits, 10) || 0;
+}
+
+/**
+ * `totalQuantity` = original batch size. On create, same as `draftQuantity`.
+ * On edit, keep the stored original unless the user raised quantity above it (restock).
+ */
+export function resolveTotalQuantityForSave(
+  draftQuantity: string,
+  editListing: ProviderListing | undefined
+): string {
+  const q = (draftQuantity ?? '').trim() || draftQuantity;
+  if (!editListing) return q;
+  const base = (editListing.totalQuantity?.trim() || editListing.quantity || '').trim();
+  if (!base) return q;
+  const dn = parseListingQuantityInt(q);
+  const bn = parseListingQuantityInt(base);
+  if (dn >= bn) return q;
+  return base;
 }
 
 const LISTING_STATUSES_OPEN_FOR_COMPLETION: ProviderListing['status'][] = ['active', 'request_open', 'claimed'];
@@ -202,7 +262,9 @@ export async function requestClaimApi(listingId: string): Promise<{ request: any
         ? 'already_requested'
         : msg === 'listing_not_requestable'
           ? 'listing_not_requestable'
-          : msg || 'Failed to request claim';
+          : msg === 'requests_fully_booked' || msg.includes('requests_fully_booked')
+            ? 'requests_fully_booked'
+            : msg || 'Failed to request claim';
     return { request: null, error: mapped };
   }
   return { request: data.request ?? null };
@@ -456,6 +518,7 @@ export async function updateListingApi(
   draft: ProviderListingDraft
 ): Promise<{ listing: ProviderListing | null; error?: string }> {
   const headers = await getAuthHeaders();
+  const gap = draft.preferenceGapSeconds ?? null;
   const res = await fetch(`${API_BASE_URL}/listings/${id}`, {
     method: 'PATCH',
     headers,
@@ -463,6 +526,7 @@ export async function updateListingApi(
       title: draft.title,
       foodType: draft.foodType,
       quantity: draft.quantity,
+      totalQuantity: draft.totalQuantity?.trim() ? draft.totalQuantity : draft.quantity,
       quantityUnit: draft.quantityUnit,
       dietaryTags: draft.dietaryTags,
       allergens: draft.allergens,
@@ -471,6 +535,8 @@ export async function updateListingApi(
       startTime: draft.startTime,
       endTime: draft.endTime,
       note: draft.note,
+      preferenceGapSeconds: gap,
+      preference_gap_seconds: gap,
     }),
   });
   const data = await res.json().catch(() => ({}));

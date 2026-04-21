@@ -374,6 +374,10 @@ function FoodDetailScreen() {
               onPress={async () => {
                 const { request, error } = await requestClaimApi(item.id);
                 if (error || !request) {
+                  if (error === 'requests_fully_booked') {
+                    Alert.alert('', 'Already requests booked try later may be available');
+                    return;
+                  }
                   if (error === 'listing_not_requestable' || error === 'already_requested') {
                     useRequestedListingsStore.getState().addRequestedId(item.id);
                     setServerRequestStatus('pending');

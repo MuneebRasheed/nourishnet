@@ -50,8 +50,13 @@ export type RootStackParamList = {
   NotificationSettingsScreen: undefined;
   FoodOnBoardScreen: { role?: AuthRole; intent?: AuthIntent } | undefined;
   FoodDetailScreen: { item: FoodDetailItem };
-  PostFoodScreen: { editListing?: ProviderListing } | undefined;
-  PostPublishScreen: { draft: PostFoodDraft; editListing?: ProviderListing } | undefined;
+  PostFoodScreen: { editListing?: ProviderListing; repostFromListing?: ProviderListing } | undefined;
+  PostPublishScreen: {
+    draft: PostFoodDraft;
+    editListing?: ProviderListing;
+    /** Prefill pickup / gap when duplicating a prior listing (e.g. re-post from previous). */
+    repostSourceListing?: ProviderListing;
+  } | undefined;
   QRCodeScreen: { listingId: string; mode?: 'scan' | 'show' };
   ListingRequestsScreen: { listingId: string; listingTitle: string };
   SubscriptionManagementScreen: undefined;

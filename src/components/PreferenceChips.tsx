@@ -4,8 +4,9 @@ import { useThemeStore } from '../../store/themeStore';
 import { getColors, palette } from '../../utils/colors';
 import { useAppFontSizes } from '../../theme/fonts';
 import { fontFamilies } from '../../theme/typography';
+import { FOOD_TYPES } from '../constants/foodTypes';
 
-const DEFAULT_PREFERENCES = ['Prepared Meals', 'Groceries', 'Baby Items', 'Halal'];
+const DEFAULT_PREFERENCES: string[] = [...FOOD_TYPES];
 
 export type PreferenceChipsProps = {
   options?: string[];

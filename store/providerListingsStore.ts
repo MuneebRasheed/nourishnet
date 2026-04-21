@@ -9,16 +9,23 @@ export type ProviderListing = {
   title: string;
   foodType: string | null;
   quantity: string;
+  /** Original posted amount; unchanged when `quantity` decreases after pickups. */
+  totalQuantity?: string;
   quantityUnit: string;
   dietaryTags: string[];
   allergens: string[];
   imageUrl?: string | null;
   pickupAddress: string;
+  /** Geocoded pickup; used for geo-filtered feed / Realtime. */
+  pickupLatitude?: number | null;
+  pickupLongitude?: number | null;
   startTime: string;
   endTime: string;
   note: string;
   createdAt: string;
   status: ProviderListingStatus;
+  /** Stagger visibility: 1–300 s delay for general audience; null = off. */
+  preferenceGapSeconds?: number | null;
 };
 
 export type ProviderListingDraft = Omit<

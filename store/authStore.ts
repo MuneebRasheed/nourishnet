@@ -21,6 +21,10 @@ export type Profile = {
   business_latitude?: number | null;
   business_longitude?: number | null;
   categories: string[];
+  /** Local end-of-day for "Need Food Today"; null or past = off. */
+  demand_pulse_expires_at?: string | null;
+  /** Up to 2 `food_type` values for priority listing visibility when pulse is on. */
+  demand_pulse_food_types?: string[];
   created_at?: string;
   updated_at?: string;
 };

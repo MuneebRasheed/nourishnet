@@ -1,30 +1,25 @@
 import React, { useEffect } from 'react';
-import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 
 import { supabase } from '../lib/supabase';
 import {
   configureNotificationHandler,
-  registerIosPushTokenIfNeeded,
+  registerExpoPushTokenIfNeeded,
 } from '../lib/pushNotifications';
 
 /**
- * Registers foreground notification behavior, auth-based iOS token registration,
- * and refreshes the Expo token when the native device token changes.
+ * Registers foreground notification behavior, Expo push token (iOS + Android),
+ * and refreshes the token when the native device token changes.
  */
 export default function PushNotificationSetup() {
   useEffect(() => {
-    if (Platform.OS === 'ios') {
-      configureNotificationHandler();
-    }
+    configureNotificationHandler();
   }, []);
 
   useEffect(() => {
-    if (Platform.OS !== 'ios') return;
-
     const sub = Notifications.addPushTokenListener(() => {
       setTimeout(() => {
-        void registerIosPushTokenIfNeeded();
+        void registerExpoPushTokenIfNeeded();
       }, 0);
     });
 
@@ -32,16 +27,13 @@ export default function PushNotificationSetup() {
   }, []);
 
   useEffect(() => {
-    if (Platform.OS !== 'ios') return;
-
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT' || !session?.user) return;
       if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
-        // Defer: async work + Supabase calls must not run inside the auth lock (deadlock risk).
         setTimeout(() => {
-          void registerIosPushTokenIfNeeded();
+          void registerExpoPushTokenIfNeeded();
         }, 0);
       }
     });

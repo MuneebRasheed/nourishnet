@@ -1,5 +1,10 @@
 const { Router } = require('express');
 const { createClient } = require('@supabase/supabase-js');
+const { geocodeAddress } = require('../lib/geocode');
+const { haversineMeters } = require('../lib/haversine');
+const { parseRadiusMeters } = require('../lib/radiusMeters');
+const { notifyNearbyRecipients } = require('../lib/notifyNearbyRecipients');
+const { isListingVisibleToRecipientNow } = require('../lib/listingVisibility');
 
 const router = Router();
 const supabaseUrl = process.env.SUPABASE_URL ?? '';
@@ -23,6 +28,38 @@ function getSupabaseService() {
   return createClient(supabaseUrl, supabaseServiceRoleKey);
 }
 
+/** True if client sent either camelCase or snake_case gap field (own property). */
+function bodyDeclaresPreferenceGapSeconds(body) {
+  if (!body || typeof body !== 'object') return false;
+  return (
+    Object.prototype.hasOwnProperty.call(body, 'preferenceGapSeconds') ||
+    Object.prototype.hasOwnProperty.call(body, 'preference_gap_seconds')
+  );
+}
+
+/**
+ * 1–300 inclusive, or null to clear / no stagger.
+ * Returns undefined only if neither gap field was sent (PATCH: leave column unchanged).
+ * Accepts camelCase or snake_case (some proxies / clients only forward one shape).
+ */
+function readPreferenceGapSeconds(body) {
+  if (!body || typeof body !== 'object') return undefined;
+  let v;
+  if (Object.prototype.hasOwnProperty.call(body, 'preferenceGapSeconds')) {
+    v = body.preferenceGapSeconds;
+  } else if (Object.prototype.hasOwnProperty.call(body, 'preference_gap_seconds')) {
+    v = body.preference_gap_seconds;
+  } else {
+    return undefined;
+  }
+  if (v === null || v === '') return null;
+  const n = typeof v === 'string' ? Number(String(v).trim()) : Number(v);
+  if (!Number.isFinite(n)) return null;
+  const r = Math.round(n);
+  if (r < 1 || r > 300) return null;
+  return r;
+}
+
 // ---------- Create listing (POST /listings) ----------
 router.post('/', async (req, res) => {
   try {
@@ -43,22 +80,54 @@ router.post('/', async (req, res) => {
       return send(res, { error: 'Title is required' }, 400);
     }
 
+    const pickupAddress = typeof body.pickupAddress === 'string' ? body.pickupAddress.trim() : '';
+    const googleKey = process.env.GOOGLE_MAPS_API_KEY ?? '';
+    let pickup_latitude = null;
+    let pickup_longitude = null;
+    if (pickupAddress && googleKey) {
+      try {
+        const coords = await geocodeAddress(pickupAddress, googleKey);
+        if (coords) {
+          pickup_latitude = coords.lat;
+          pickup_longitude = coords.lng;
+        }
+      } catch (geoErr) {
+        console.warn('[listings POST] geocode failed, continuing without coords', geoErr?.message ?? geoErr);
+      }
+    }
+
+    const rawGap = readPreferenceGapSeconds(body);
+    const preference_gap_seconds = rawGap === undefined ? null : rawGap;
+
+    const qty = typeof body.quantity === 'string' ? body.quantity : '';
+    const totalQtyRaw =
+      typeof body.totalQuantity === 'string'
+        ? body.totalQuantity.trim()
+        : typeof body.total_quantity === 'string'
+          ? body.total_quantity.trim()
+          : '';
+    const total_quantity = totalQtyRaw !== '' ? totalQtyRaw : qty;
+
     const row = {
       provider_id: user.id,
       title,
       food_type: typeof body.foodType === 'string' ? body.foodType.trim() || null : null,
-      quantity: typeof body.quantity === 'string' ? body.quantity : '',
+      quantity: qty,
+      total_quantity,
       quantity_unit: typeof body.quantityUnit === 'string' ? body.quantityUnit : 'Portions',
       dietary_tags: Array.isArray(body.dietaryTags) ? body.dietaryTags : [],
       allergens: Array.isArray(body.allergens) ? body.allergens : [],
       image_url: typeof body.imageUrl === 'string' ? body.imageUrl.trim() : null,
-      pickup_address: typeof body.pickupAddress === 'string' ? body.pickupAddress.trim() : '',
+      pickup_address: pickupAddress,
+      pickup_latitude,
+      pickup_longitude,
       start_time: typeof body.startTime === 'string' ? body.startTime : '',
       end_time: typeof body.endTime === 'string' ? body.endTime : '',
       note: typeof body.note === 'string' ? body.note.trim() : '',
       status: 'active',
       claim_mode: 'window',
       claim_window_seconds: 180,
+      preference_gap_seconds,
     };
 
     const { data, error } = await supabase.from('listings').insert(row).select().single();
@@ -66,6 +135,16 @@ router.post('/', async (req, res) => {
       console.error('[listings POST]', error);
       return send(res, { error: error.message ?? 'Failed to create listing' }, 500);
     }
+
+    const service = getSupabaseService();
+    if (service && data?.id && pickup_latitude != null && pickup_longitude != null) {
+      setImmediate(() => {
+        notifyNearbyRecipients(service, data, user.id).catch((e) =>
+          console.warn('[listings POST] notifyNearbyRecipients', e?.message ?? e)
+        );
+      });
+    }
+
     return send(res, { listing: data }, 201);
   } catch (e) {
     console.error('[listings POST]', e);
@@ -273,7 +352,40 @@ router.get('/browse', async (req, res) => {
       console.error('[listings GET /browse]', error);
       return send(res, { error: error.message ?? 'Failed to fetch listings' }, 500);
     }
-    return send(res, { listings: data ?? [] }, 200);
+
+    let listings = data ?? [];
+    const { data: profileRow, error: profileError } = await client
+      .from('profiles')
+      .select('role, latitude, longitude, demand_pulse_expires_at, demand_pulse_food_types')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    const nowMs = Date.now();
+
+    if (!profileError && profileRow?.role === 'recipient') {
+      const plat = profileRow.latitude != null ? Number(profileRow.latitude) : null;
+      const plng = profileRow.longitude != null ? Number(profileRow.longitude) : null;
+      if (
+        plat != null &&
+        plng != null &&
+        Number.isFinite(plat) &&
+        Number.isFinite(plng)
+      ) {
+        const radiusM = parseRadiusMeters();
+        listings = listings.filter((row) => {
+          const blat = row.pickup_latitude != null ? Number(row.pickup_latitude) : null;
+          const blng = row.pickup_longitude != null ? Number(row.pickup_longitude) : null;
+          if (blat == null || blng == null || !Number.isFinite(blat) || !Number.isFinite(blng)) {
+            return false;
+          }
+          return haversineMeters(blat, blng, plat, plng) <= radiusM;
+        });
+      }
+
+      listings = listings.filter((row) => isListingVisibleToRecipientNow(row, profileRow, nowMs));
+    }
+
+    return send(res, { listings }, 200);
   } catch (e) {
     console.error('[listings GET /browse]', e);
     return send(res, { error: 'Something went wrong' }, 500);
@@ -474,6 +586,8 @@ router.patch('/:id', async (req, res) => {
     if (typeof body.title === 'string' && body.title.trim()) updates.title = body.title.trim();
     if (body.foodType !== undefined) updates.food_type = typeof body.foodType === 'string' ? body.foodType.trim() || null : null;
     if (typeof body.quantity === 'string') updates.quantity = body.quantity;
+    if (typeof body.totalQuantity === 'string') updates.total_quantity = body.totalQuantity;
+    else if (typeof body.total_quantity === 'string') updates.total_quantity = body.total_quantity;
     if (typeof body.quantityUnit === 'string') updates.quantity_unit = body.quantityUnit;
     if (Array.isArray(body.dietaryTags)) updates.dietary_tags = body.dietaryTags;
     if (Array.isArray(body.allergens)) updates.allergens = body.allergens;
@@ -482,6 +596,10 @@ router.patch('/:id', async (req, res) => {
     if (typeof body.startTime === 'string') updates.start_time = body.startTime;
     if (typeof body.endTime === 'string') updates.end_time = body.endTime;
     if (typeof body.note === 'string') updates.note = body.note.trim();
+    if (bodyDeclaresPreferenceGapSeconds(body)) {
+      const g = readPreferenceGapSeconds(body);
+      if (g !== undefined) updates.preference_gap_seconds = g;
+    }
 
     const { data, error } = await supabase
       .from('listings')

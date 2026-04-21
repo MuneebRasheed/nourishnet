@@ -3,7 +3,7 @@ import type { Profile } from '../../store/authStore';
 import { isGoogleMapsConfigured } from './googleMaps';
 
 const PROFILE_COLUMNS =
-  'id, role, email, full_name, avatar_url, address, latitude, longitude, phone, business_name, business_address, business_latitude, business_longitude, categories, created_at, updated_at';
+  'id, role, email, full_name, avatar_url, address, latitude, longitude, phone, business_name, business_address, business_latitude, business_longitude, categories, demand_pulse_expires_at, demand_pulse_food_types, created_at, updated_at';
 
 function normalizeRole(role: unknown): Profile['role'] {
   if (typeof role !== 'string') return null;
@@ -46,6 +46,13 @@ export async function fetchProfile(userId: string): Promise<Profile | null> {
         ? Number(data.business_longitude)
         : null,
     categories: Array.isArray(data.categories) ? data.categories : [],
+    demand_pulse_expires_at:
+      data.demand_pulse_expires_at != null && typeof data.demand_pulse_expires_at === 'string'
+        ? data.demand_pulse_expires_at
+        : null,
+    demand_pulse_food_types: Array.isArray(data.demand_pulse_food_types)
+      ? data.demand_pulse_food_types.filter((t): t is string => typeof t === 'string')
+      : [],
     created_at: data.created_at,
     updated_at: data.updated_at,
   };

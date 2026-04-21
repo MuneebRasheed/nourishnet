@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { StyleSheet, Text, View, ScrollView, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -11,7 +11,12 @@ import { useAppFontSizes } from '../../theme/fonts';
 import { fontFamilies } from '../../theme/typography';
 import { RootStackParamList } from '../navigations/RootNavigation';
 import type { ProviderListing } from '../../store/providerListingsStore';
-import { fetchBrowseListingsApi, fetchMyRequestsApi } from '../lib/api/listings';
+import {
+  fetchBrowseListingsApi,
+  fetchMyRequestsApi,
+  listingRowToProviderListing,
+} from '../lib/api/listings';
+import { supabase } from '../lib/supabase';
 import HomeHeader from '../components/HomeHeader';
 import SearchBarWithFilter from '../components/SearchBarWithFilter';
 import FilterModal, {
@@ -24,6 +29,11 @@ import BoxIcon from '../assets/svgs/BoxIcon';
 import type { FoodDetailItem } from './FoodDetailScreen';
 import { getAvatarLetter, getDisplayName, avatarUriWithCacheBust } from '../lib/profile';
 import { fetchStreakTextApi } from '../lib/api/analytics';
+import { getFeedRadiusMeters, haversineMeters } from '../lib/geoFeed';
+import {
+  isListingVisibleForRecipient,
+  msUntilListingVisibleForRecipient,
+} from '../lib/demandPulseVisibility';
 
 const DEFAULT_LISTING_IMAGE = require('../assets/images/FoodOnboard1.png');
 
@@ -112,6 +122,12 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [streakText, setStreakText] = useState('0-day streak');
+  /** Unique Realtime topic per subscription — reused topic + `.on()` after `subscribe()` throws. */
+  const listingsRecipientFeedChannelSeq = useRef(0);
+  /** Bumps on Realtime effect cleanup so stagger timers from a previous subscription do not update state. */
+  const recipientFeedRealtimeGen = useRef(0);
+  /** INSERT → refetch after preference gap (no second Realtime event at eligible time). */
+  const staggerRevealTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
     let cancelled = false;
@@ -135,6 +151,102 @@ export default function HomeScreen() {
       cancelled = true;
     };
   }, []);
+
+  /** Live updates when new listings are inserted (no pull-to-refresh). Geo-gated like GET /browse. */
+  useEffect(() => {
+    if (userRole !== 'recipient') {
+      recipientFeedRealtimeGen.current += 1;
+      staggerRevealTimersRef.current.forEach((tid) => clearTimeout(tid));
+      staggerRevealTimersRef.current.clear();
+      return;
+    }
+
+    const realtimeGen = ++recipientFeedRealtimeGen.current;
+
+    const recipientLat =
+      profile?.latitude != null && Number.isFinite(Number(profile.latitude))
+        ? Number(profile.latitude)
+        : null;
+    const recipientLng =
+      profile?.longitude != null && Number.isFinite(Number(profile.longitude))
+        ? Number(profile.longitude)
+        : null;
+    const hasRecipientCoords = recipientLat != null && recipientLng != null;
+
+    const channelTopic = `listings-recipient-feed:${profile?.id ?? 'user'}:${++listingsRecipientFeedChannelSeq.current}`;
+    const channel = supabase
+      .channel(channelTopic)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'listings' },
+        (payload) => {
+          const listing = listingRowToProviderListing(
+            (payload.new ?? {}) as Record<string, unknown>
+          );
+          if (!listing) return;
+          const visible =
+            listing.status === 'active' ||
+            listing.status === 'request_open' ||
+            listing.status === 'claimed';
+          if (!visible) return;
+
+          if (hasRecipientCoords) {
+            const blat = listing.pickupLatitude;
+            const blng = listing.pickupLongitude;
+            if (
+              blat == null ||
+              blng == null ||
+              !Number.isFinite(blat) ||
+              !Number.isFinite(blng)
+            ) {
+              return;
+            }
+            const d = haversineMeters(blat, blng, recipientLat, recipientLng);
+            if (d > getFeedRadiusMeters()) return;
+          }
+
+          const nowMs = Date.now();
+          const pulseProfile = useAuthStore.getState().profile;
+          if (isListingVisibleForRecipient(listing, pulseProfile, nowMs)) {
+            const pending = staggerRevealTimersRef.current.get(listing.id);
+            if (pending) {
+              clearTimeout(pending);
+              staggerRevealTimersRef.current.delete(listing.id);
+            }
+            setBrowseListings((prev) => {
+              if (prev.some((l) => l.id === listing.id)) return prev;
+              return [listing, ...prev];
+            });
+            return;
+          }
+
+          // Stagger: no second Realtime event when the gap elapses — refetch browse once we're eligible.
+          const delay = msUntilListingVisibleForRecipient(listing, pulseProfile, nowMs);
+          if (delay == null) return;
+          const listingId = listing.id;
+          if (staggerRevealTimersRef.current.has(listingId)) return;
+
+          const t = setTimeout(() => {
+            staggerRevealTimersRef.current.delete(listingId);
+            if (recipientFeedRealtimeGen.current !== realtimeGen) return;
+            void (async () => {
+              const browseRes = await fetchBrowseListingsApi();
+              if (recipientFeedRealtimeGen.current !== realtimeGen || browseRes.error) return;
+              setBrowseListings(browseRes.listings);
+            })();
+          }, delay);
+          staggerRevealTimersRef.current.set(listingId, t);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      recipientFeedRealtimeGen.current += 1;
+      staggerRevealTimersRef.current.forEach((tid) => clearTimeout(tid));
+      staggerRevealTimersRef.current.clear();
+      void supabase.removeChannel(channel);
+    };
+  }, [userRole, profile?.latitude, profile?.longitude]);
 
   useEffect(() => {
     let cancelled = false;
@@ -254,15 +366,23 @@ export default function HomeScreen() {
     useCallback(() => {
       let cancelled = false;
       (async () => {
-        const { active, completed, error } = await fetchMyRequestsApi();
-        if (cancelled || error) return;
-        setRequestedIds(active.map((r) => r.id));
-        setRecipientCompletedListingIds(new Set(completed.map((r) => r.id)));
+        const [myRes, browseRes] = await Promise.all([
+          fetchMyRequestsApi(),
+          userRole === 'recipient' ? fetchBrowseListingsApi() : Promise.resolve(null),
+        ]);
+        if (cancelled) return;
+        if (!myRes.error) {
+          setRequestedIds(myRes.active.map((r) => r.id));
+          setRecipientCompletedListingIds(new Set(myRes.completed.map((r) => r.id)));
+        }
+        if (userRole === 'recipient' && browseRes && !browseRes.error) {
+          setBrowseListings(browseRes.listings);
+        }
       })();
       return () => {
         cancelled = true;
       };
-    }, [setRequestedIds])
+    }, [setRequestedIds, userRole, profile?.demand_pulse_expires_at, profile?.demand_pulse_food_types])
   );
 
   return (

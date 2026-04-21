@@ -5,6 +5,38 @@ import { supabase } from './supabase';
 
 const BUCKET = 'listing-images';
 
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+function isRetriableStorageError(error: { message?: string; name?: string } | null): boolean {
+  if (!error) return false;
+  const name = String(error.name ?? '');
+  const msg = String(error.message ?? '').toLowerCase();
+  if (name === 'StorageUnknownError') return true;
+  if (msg.includes('timeout')) return true;
+  if (msg.includes('timed out')) return true;
+  if (msg.includes('network')) return true;
+  if (msg.includes('failed to fetch')) return true;
+  if (msg.includes('load failed')) return true;
+  return false;
+}
+
+/** Ensures a fresh access token before the first storage call (cold start / resume). */
+async function ensureAuthFreshForStorage(): Promise<void> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) return;
+  const expiresAt = session.expires_at ? session.expires_at * 1000 : null;
+  const now = Date.now();
+  const shouldRefresh = expiresAt == null || expiresAt <= now + 90_000;
+  if (!shouldRefresh) return;
+  try {
+    await supabase.auth.refreshSession();
+  } catch {
+    // keep existing session; upload may still succeed
+  }
+}
+
 export type PickListingImageResult = {
   uri: string;
   base64: string | null;
@@ -54,20 +86,34 @@ export async function uploadListingImage(
 ): Promise<string | null> {
   const safeType = contentType || 'image/jpeg';
   const ext = safeType.includes('png') ? 'png' : safeType.includes('webp') ? 'webp' : 'jpg';
-  const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const filename = `${listingIdHint ?? 'new'}-${unique}.${ext}`;
-  const path = `${userId}/${filename}`;
   const arrayBuffer = decode(base64);
 
-  const { error } = await supabase.storage.from(BUCKET).upload(path, arrayBuffer, {
-    contentType: safeType,
-    upsert: false,
-  });
-  if (error) {
-    console.error('[uploadListingImage]', error);
-    return null;
+  await ensureAuthFreshForStorage();
+
+  const maxAttempts = 4;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const filename = `${listingIdHint ?? 'new'}-${unique}.${ext}`;
+    const path = `${userId}/${filename}`;
+
+    const { error } = await supabase.storage.from(BUCKET).upload(path, arrayBuffer, {
+      contentType: safeType,
+      upsert: false,
+    });
+
+    if (!error) {
+      const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
+      return data.publicUrl;
+    }
+
+    const retriable = isRetriableStorageError(error) && attempt < maxAttempts;
+    if (!retriable) {
+      console.error('[uploadListingImage]', error);
+      return null;
+    }
+
+    await sleep(350 * attempt);
   }
 
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
-  return data.publicUrl;
+  return null;
 }

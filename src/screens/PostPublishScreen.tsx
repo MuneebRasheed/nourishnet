@@ -17,7 +17,7 @@ import type { RouteProp } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useThemeStore } from '../../store/themeStore';
-import { getColors } from '../../utils/colors';
+import { getColors, palette } from '../../utils/colors';
 import { useAppFontSizes } from '../../theme/fonts';
 import { fontFamilies } from '../../theme/typography';
 import { RootStackParamList } from '../navigations/RootNavigation';
@@ -25,16 +25,19 @@ import SettingsHeader from '../components/SettingsHeader';
 import ContinueButton from '../components/ContinueButton';
 import { AuthInput } from '../components/AuthInput';
 import ConfirmationCheckbox from '../components/ConfirmationCheckbox';
+import CustomSwitch from '../components/CustomSwitch';
 import ArrowBACK from '../assets/svgs/ArrowBACK';
 import ArrowDown from '../assets/svgs/ArrowDown';
 import ClockICon from '../assets/svgs/ClockICon';
 import LocationPin from '../assets/svgs/LocationPin';
 import { useProviderListingsStore, type ProviderListing } from '../../store/providerListingsStore';
+import { useAuthStore } from '../../store/authStore';
 import {
   createListingApi,
   updateListingApi,
   finalizeZeroQuantityListingsOnServer,
   listingHasZeroQuantity,
+  resolveTotalQuantityForSave,
 } from '../lib/api/listings';
 import { supabase } from '../lib/supabase';
 import { uploadListingImage } from '../lib/uploadListingImage';
@@ -63,6 +66,8 @@ function parseTimeStringToDate(s: string): Date | null {
   return d;
 }
 
+type GapUnit = 'minutes' | 'seconds';
+
 const SAFETY_ITEMS = [
   'I confirm this food was handled safely and in accordance with local health and food safety regulations.',
   'This food is within local food donation guidelines applicable to my jurisdiction.',
@@ -79,6 +84,9 @@ export default function PostPublishScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'PostPublishScreen'>>();
   const editListing = route.params?.editListing;
+  const repostSourceListing = route.params?.repostSourceListing;
+  const profile = useAuthStore((s) => s.profile);
+  const defaultPickupFromBusinessProfile = profile?.business_address?.trim() ?? '';
   const addListingFromApi = useProviderListingsStore((s) => s.addListingFromApi);
   const [publishing, setPublishing] = useState(false);
 
@@ -93,33 +101,76 @@ export default function PostPublishScreen() {
     return d;
   };
 
-  const [pickupAddress, setPickupAddress] = useState(editListing?.pickupAddress ?? '');
+  const [pickupAddress, setPickupAddress] = useState(
+    () =>
+      editListing?.pickupAddress?.trim() ??
+      repostSourceListing?.pickupAddress?.trim() ??
+      defaultPickupFromBusinessProfile
+  );
   const [pickupStart, setPickupStart] = useState<Date | null>(() =>
-    editListing?.startTime ? parseTimeStringToDate(editListing.startTime) : null
+    editListing?.startTime
+      ? parseTimeStringToDate(editListing.startTime)
+      : repostSourceListing?.startTime
+        ? parseTimeStringToDate(repostSourceListing.startTime)
+        : null
   );
   const [pickupEnd, setPickupEnd] = useState<Date | null>(() =>
-    editListing?.endTime ? parseTimeStringToDate(editListing.endTime) : null
+    editListing?.endTime
+      ? parseTimeStringToDate(editListing.endTime)
+      : repostSourceListing?.endTime
+        ? parseTimeStringToDate(repostSourceListing.endTime)
+        : null
   );
   const [showTimePickerModal, setShowTimePickerModal] = useState(false);
   const [timePickerMode, setTimePickerMode] = useState<'start' | 'end' | null>(null);
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
-  const [note, setNote] = useState(editListing?.note ?? '');
+  const [note, setNote] = useState(editListing?.note ?? repostSourceListing?.note ?? '');
   const [confirmations, setConfirmations] = useState<boolean[]>([false, false, false, false]);
+
+  const [gapStaggerEnabled, setGapStaggerEnabled] = useState(false);
+  const [gapAmount, setGapAmount] = useState('2');
+  const [gapUnit, setGapUnit] = useState<GapUnit>('minutes');
+  const [showGapUnitDropdown, setShowGapUnitDropdown] = useState(false);
+
+  const applyPickupAndGapFromListing = (listing: ProviderListing) => {
+    setPickupAddress(listing.pickupAddress?.trim() ?? '');
+    setPickupStart(listing.startTime ? parseTimeStringToDate(listing.startTime) : null);
+    setPickupEnd(listing.endTime ? parseTimeStringToDate(listing.endTime) : null);
+    setNote(listing.note ?? '');
+    const pg = listing.preferenceGapSeconds;
+    if (pg != null && pg >= 1 && pg <= 300) {
+      setGapStaggerEnabled(true);
+      if (pg % 60 === 0 && pg / 60 >= 1 && pg / 60 <= 5) {
+        setGapUnit('minutes');
+        setGapAmount(String(pg / 60));
+      } else {
+        setGapUnit('seconds');
+        setGapAmount(String(pg));
+      }
+    } else {
+      setGapStaggerEnabled(false);
+      setGapAmount('2');
+      setGapUnit('minutes');
+    }
+  };
 
   useEffect(() => {
     if (editListing) {
-      setPickupAddress(editListing.pickupAddress ?? '');
-      setPickupStart(editListing.startTime ? parseTimeStringToDate(editListing.startTime) : null);
-      setPickupEnd(editListing.endTime ? parseTimeStringToDate(editListing.endTime) : null);
-      setNote(editListing.note ?? '');
+      applyPickupAndGapFromListing(editListing);
+    } else if (repostSourceListing) {
+      applyPickupAndGapFromListing(repostSourceListing);
     } else {
-      setPickupAddress('');
+      setPickupAddress(profile?.business_address?.trim() ?? '');
       setPickupStart(null);
       setPickupEnd(null);
       setNote('');
+      setGapStaggerEnabled(false);
+      setGapAmount('2');
+      setGapUnit('minutes');
     }
-  }, [editListing]);
+    setShowGapUnitDropdown(false);
+  }, [editListing, repostSourceListing, profile?.business_address]);
 
   const openStartTimePicker = () => {
     if (pickupStart === null) setPickupStart(getDefaultStart());
@@ -169,6 +220,35 @@ export default function PostPublishScreen() {
   };
 
   const allConfirmed = confirmations.every(Boolean);
+
+  /** Returns seconds 1–300, or null if stagger off. Sets alerts and returns undefined on invalid. */
+  const resolvePreferenceGapSeconds = (): number | null | undefined => {
+    if (!gapStaggerEnabled) return null;
+    const raw = gapAmount.trim();
+    const n = parseInt(raw, 10);
+    if (!Number.isFinite(n) || n < 1) {
+      Alert.alert('Invalid gap', 'Enter a whole number of at least 1.');
+      return undefined;
+    }
+    if (gapUnit === 'minutes') {
+      if (n > 5) {
+        Alert.alert('Invalid gap', 'Maximum is 5 minutes.');
+        return undefined;
+      }
+      const seconds = n * 60;
+      if (seconds < 1 || seconds > 300) {
+        Alert.alert('Invalid gap', 'Maximum gap is 5 minutes (300 seconds).');
+        return undefined;
+      }
+      return seconds;
+    }
+    if (n > 300) {
+      Alert.alert('Invalid gap', 'Maximum is 300 seconds (5 minutes).');
+      return undefined;
+    }
+    return n;
+  };
+
   const handlePublish = async () => {
     const draft = route.params?.draft;
     if (!draft) return;
@@ -193,6 +273,9 @@ export default function PostPublishScreen() {
       return;
     }
 
+    const preferenceGapSeconds = resolvePreferenceGapSeconds();
+    if (preferenceGapSeconds === undefined) return;
+
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) {
       Alert.alert('Sign in required', 'Please sign in again to publish or edit listings.');
@@ -200,10 +283,13 @@ export default function PostPublishScreen() {
       return;
     }
 
+    const totalQuantity = resolveTotalQuantityForSave(draft.quantity, editListing);
+
     const payload = {
       title: draft.foodTitle || 'Food name',
       foodType: draft.foodType,
       quantity: draft.quantity,
+      totalQuantity,
       quantityUnit: draft.quantityUnit,
       dietaryTags: draft.dietarySelected,
       allergens: draft.allergensSelected,
@@ -212,6 +298,7 @@ export default function PostPublishScreen() {
       startTime: pickupStart ? formatTimeForDisplay(pickupStart) : '6:00 AM',
       endTime: pickupEnd ? formatTimeForDisplay(pickupEnd) : '6:00 PM',
       note,
+      preferenceGapSeconds,
     };
 
     setPublishing(true);
@@ -455,6 +542,156 @@ export default function PostPublishScreen() {
           />
         </View>
 
+        {/* Preference gap (stagger visibility) */}
+        <Text
+          style={[
+            styles.sectionTitle,
+            { color: colors.text, fontFamily: fontFamilies.interBold, fontSize: fonts.body },
+          ]}
+        >
+          Visibility timing
+        </Text>
+        <Text
+          style={[
+            styles.sectionSubtitle,
+            {
+              color: colors.textSecondary,
+              fontFamily: fontFamilies.inter,
+              fontSize: fonts.caption,
+              lineHeight: 20,
+            },
+          ]}
+        >
+          Optional: high-need recipients can be notified first; everyone else sees the listing after
+          this gap (max 5 minutes). General rollout uses this delay.
+        </Text>
+        <View
+          style={[
+            styles.gapCard,
+            { backgroundColor: colors.inputFieldBg, borderColor: colors.borderColor },
+            !isDark && { borderWidth: 1 },
+          ]}
+        >
+          <View style={styles.gapSwitchRow}>
+            <View style={styles.gapSwitchLabelWrap}>
+              <Text
+                style={[
+                  styles.gapSwitchTitle,
+                  { color: colors.text, fontFamily: fontFamilies.interMedium, fontSize: fonts.subhead },
+                ]}
+              >
+                Stagger general visibility
+              </Text>
+              <Text
+                style={[
+                  styles.gapSwitchHint,
+                  { color: colors.textSecondary, fontFamily: fontFamilies.inter, fontSize: fonts.caption },
+                ]}
+              >
+                Preference gap before all nearby recipients see this post
+              </Text>
+            </View>
+            <CustomSwitch
+              value={gapStaggerEnabled}
+              onValueChange={(v) => {
+                setGapStaggerEnabled(v);
+                setShowGapUnitDropdown(false);
+              }}
+              trackColor={{
+                false: isDark ? palette.white : palette.settingsIconBg,
+                true: colors.primary,
+              }}
+              thumbColor={palette.largeFontbutton}
+              trackBorderColor={colors.borderColor}
+            />
+          </View>
+          {gapStaggerEnabled ? (
+            <View style={[styles.gapFields, { borderTopColor: colors.borderColor }]}>
+              <Text
+                style={[
+                  styles.label,
+                  { color: colors.text, fontFamily: fontFamilies.interMedium, fontSize: fonts.caption },
+                ]}
+              >
+                Preference gap time
+              </Text>
+              <View style={styles.gapAmountRow}>
+                <TextInput
+                  style={[
+                    styles.gapAmountInput,
+                    {
+                      backgroundColor: colors.background,
+                      borderColor: colors.borderColor,
+                      color: colors.text,
+                    },
+                  ]}
+                  value={gapAmount}
+                  onChangeText={setGapAmount}
+                  placeholder={gapUnit === 'minutes' ? '1–5' : '1–300'}
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType="number-pad"
+                />
+                <TouchableOpacity
+                  style={[styles.gapUnitSelect, { backgroundColor: colors.background, borderColor: colors.borderColor }]}
+                  activeOpacity={0.8}
+                  onPress={() => setShowGapUnitDropdown((prev) => !prev)}
+                >
+                  <Text
+                    style={[
+                      styles.gapUnitText,
+                      { color: colors.text, fontFamily: fontFamilies.inter, fontSize: fonts.subhead },
+                    ]}
+                  >
+                    {gapUnit === 'minutes' ? 'Minutes' : 'Seconds'}
+                  </Text>
+                  <MaterialIcons
+                    name={showGapUnitDropdown ? 'keyboard-arrow-up' : 'keyboard-arrow-down'}
+                    size={24}
+                    color={arrowColor}
+                  />
+                </TouchableOpacity>
+              </View>
+              {showGapUnitDropdown ? (
+                <View
+                  style={[
+                    styles.gapDropdown,
+                    { backgroundColor: colors.background, borderColor: colors.borderColor },
+                  ]}
+                >
+                  {(['minutes', 'seconds'] as const).map((u) => (
+                    <TouchableOpacity
+                      key={u}
+                      style={styles.gapDropdownItem}
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        setGapUnit(u);
+                        setShowGapUnitDropdown(false);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.gapDropdownText,
+                          { color: colors.text, fontFamily: fontFamilies.inter, fontSize: fonts.subhead },
+                        ]}
+                      >
+                        {u === 'minutes' ? 'Minutes' : 'Seconds'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ) : null}
+              <Text
+                style={[
+                  styles.gapCapHint,
+                  { color: colors.textSecondary, fontFamily: fontFamilies.inter, fontSize: fonts.caption },
+                ]}
+              >
+                Maximum 5 minutes (300 seconds).
+              </Text>
+            </View>
+          ) : null}
+        </View>
+
         {/* Food Safety Confirmation */}
         <Text
           style={[
@@ -585,5 +822,71 @@ const styles = StyleSheet.create({
   timePickerDoneBtn: {
     marginTop: 16,
     width: '100%',
+  },
+  gapCard: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    marginBottom: 20,
+    borderWidth: 0,
+  },
+  gapSwitchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  gapSwitchLabelWrap: {
+    flex: 1,
+  },
+  gapSwitchTitle: {
+    marginBottom: 4,
+  },
+  gapSwitchHint: {
+    lineHeight: 18,
+  },
+  gapFields: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  gapAmountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  gapAmountInput: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    fontFamily: fontFamilies.inter,
+    fontSize: 16,
+  },
+  gapUnitSelect: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 6,
+    minWidth: 120,
+  },
+  gapUnitText: {},
+  gapDropdown: {
+    marginTop: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  gapDropdownItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  gapDropdownText: {},
+  gapCapHint: {
+    marginTop: 8,
   },
 });
