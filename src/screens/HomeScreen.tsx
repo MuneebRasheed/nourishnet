@@ -29,6 +29,7 @@ import BoxIcon from '../assets/svgs/BoxIcon';
 import type { FoodDetailItem } from './FoodDetailScreen';
 import { getAvatarLetter, getDisplayName, avatarUriWithCacheBust } from '../lib/profile';
 import { fetchStreakTextApi } from '../lib/api/analytics';
+import { useNotificationInboxStore } from '../../store/notificationInboxStore';
 import { getFeedRadiusMeters, haversineMeters } from '../lib/geoFeed';
 import {
   isListingVisibleForRecipient,
@@ -139,6 +140,7 @@ export default function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const profile = useAuthStore((s) => s.profile);
   const userRole = useAuthStore((s) => s.userRole);
+  const notificationUnreadCount = useNotificationInboxStore((s) => s.unreadCount);
   const homeHeaderAvatarUri = avatarUriWithCacheBust(profile?.avatar_url, profile?.updated_at);
   const [browseListings, setBrowseListings] = useState<ProviderListing[]>([]);
   /** Listing ids the current user already finished (same bucket as My Requests → Completed). Hidden from this recipient’s home feed. */
@@ -457,6 +459,7 @@ export default function HomeScreen() {
             userName={getDisplayName(profile)}
             avatarLetter={getAvatarLetter(profile)}
             avatarSource={homeHeaderAvatarUri ? { uri: homeHeaderAvatarUri } : undefined}
+            notificationCount={notificationUnreadCount}
             streakText={streakText}
           />
           <View style={styles.searchSection}>

@@ -23,6 +23,7 @@ import SettingTabFill from '../assets/svgs/SettingTabFill';
 import ListingIcon from '../assets/svgs/ListingIcon';
 import SearchNavigationStack from './SearchNavigationStack';
 import ListingsNavigationStack from './ListingsNavigationStack';
+import NotificationInboxSync from '../components/NotificationInboxSync';
 
 export type MainTabParamList = {
   Home: undefined;
@@ -59,7 +60,9 @@ function MainTabNavigator() {
   // Recipient flow: Home (HomeScreen), Favorites, Search, Analytics, Settings (5 tabs).
 
   return (
-    <Tab.Navigator
+    <>
+      <NotificationInboxSync />
+      <Tab.Navigator
       id="MainTabNavigator"
       initialRouteName="Home"
       // Key by role so tabs remount and show the correct set (provider vs recipient) after login.
@@ -133,6 +136,7 @@ function MainTabNavigator() {
         }}
       />
     </Tab.Navigator>
+    </>
   );
 }
 

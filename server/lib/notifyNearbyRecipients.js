@@ -4,9 +4,45 @@ const { parseRadiusMeters } = require('./radiusMeters');
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 const BATCH_SIZE = 100;
 
+/** Align with DB check constraint in `023_notifications.sql` */
+const NOTIFICATION_TYPES = {
+  REQUEST_ACCEPTED: 'request_accepted',
+  NEW_FOOD_AVAILABLE: 'new_food_available',
+  REQUEST_NOT_AVAILABLE: 'request_not_available',
+  PICKUP_REMINDER: 'pickup_reminder',
+};
+
+/**
+ * Snapshot of listing for inbox / deep link (matches app listing fields where useful).
+ * @param {Record<string, unknown>} listing
+ * @param {string} providerId
+ */
+function buildNewFoodAvailableData(listing, providerId) {
+  return {
+    listingId: listing.id,
+    providerId: listing.provider_id ?? providerId,
+    title: listing.title ?? null,
+    foodType: listing.food_type ?? null,
+    quantity: listing.quantity ?? null,
+    totalQuantity: listing.total_quantity ?? null,
+    quantityUnit: listing.quantity_unit ?? null,
+    dietaryTags: listing.dietary_tags ?? [],
+    allergens: listing.allergens ?? [],
+    imageUrl: listing.image_url ?? null,
+    pickupAddress: listing.pickup_address ?? null,
+    pickupLatitude: listing.pickup_latitude ?? null,
+    pickupLongitude: listing.pickup_longitude ?? null,
+    startTime: listing.start_time ?? null,
+    endTime: listing.end_time ?? null,
+    note: listing.note ?? null,
+    status: listing.status ?? null,
+    createdAt: listing.created_at ?? null,
+  };
+}
+
 /**
  * @param {import('@supabase/supabase-js').SupabaseClient} service
- * @param {{ id: string; title?: string; pickup_latitude?: number | null; pickup_longitude?: number | null }} listing
+ * @param {Record<string, unknown>} listing
  * @param {string} providerId
  */
 async function notifyNearbyRecipients(service, listing, providerId) {
@@ -29,12 +65,14 @@ async function notifyNearbyRecipients(service, listing, providerId) {
     return;
   }
 
+  /** @type {string[]} */
+  const inRangeRecipientIds = [];
+  const seenRecipientIds = new Set();
   const tokens = [];
-  const seen = new Set();
+  const seenTokens = new Set();
 
   for (const p of profiles ?? []) {
-    if (!p?.expo_push_token || typeof p.expo_push_token !== 'string') continue;
-    if (p.id === providerId) continue;
+    if (!p?.id || p.id === providerId) continue;
     const plat = p.latitude != null ? Number(p.latitude) : null;
     const plng = p.longitude != null ? Number(p.longitude) : null;
     if (plat == null || plng == null || !Number.isFinite(plat) || !Number.isFinite(plng)) continue;
@@ -42,10 +80,31 @@ async function notifyNearbyRecipients(service, listing, providerId) {
     const d = haversineMeters(pickupLat, pickupLng, plat, plng);
     if (d > radiusM) continue;
 
+    if (!seenRecipientIds.has(p.id)) {
+      seenRecipientIds.add(p.id);
+      inRangeRecipientIds.push(p.id);
+    }
+
+    if (!p.expo_push_token || typeof p.expo_push_token !== 'string') continue;
     const t = p.expo_push_token.trim();
-    if (!t || seen.has(t)) continue;
-    seen.add(t);
+    if (!t || seenTokens.has(t)) continue;
+    seenTokens.add(t);
     tokens.push(t);
+  }
+
+  if (inRangeRecipientIds.length === 0) return;
+
+  const dataPayload = buildNewFoodAvailableData(listing, providerId);
+  for (let i = 0; i < inRangeRecipientIds.length; i += BATCH_SIZE) {
+    const chunk = inRangeRecipientIds.slice(i, i + BATCH_SIZE).map((userId) => ({
+      user_id: userId,
+      type: NOTIFICATION_TYPES.NEW_FOOD_AVAILABLE,
+      data: dataPayload,
+    }));
+    const { error: insertError } = await service.from('notifications').insert(chunk);
+    if (insertError) {
+      console.warn('[notifyNearbyRecipients] notifications insert', insertError.message);
+    }
   }
 
   if (tokens.length === 0) return;
@@ -82,4 +141,4 @@ async function notifyNearbyRecipients(service, listing, providerId) {
   }
 }
 
-module.exports = { notifyNearbyRecipients };
+module.exports = { notifyNearbyRecipients, NOTIFICATION_TYPES };

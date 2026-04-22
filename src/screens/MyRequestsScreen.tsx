@@ -10,7 +10,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, CommonActions } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useThemeStore } from '../../store/themeStore';
 import { useRequestedListingsStore } from '../../store/requestedListingsStore';
@@ -50,6 +50,14 @@ export default function MyRequestsScreen() {
     else setRefreshing(false);
     if (err) {
       setError(err);
+      if (err === 'Your session expired. Please log in again.') {
+        navigation.dispatch(
+          CommonActions.reset({
+            index: 0,
+            routes: [{ name: 'LoginScreen' }],
+          })
+        );
+      }
       return;
     }
     setActiveRequests(active);
@@ -71,6 +79,13 @@ export default function MyRequestsScreen() {
 
   const requests = activeTab === 'Active' ? activeRequests : completedRequests;
   const topRefreshOffset = 20;
+
+  const getClaimLabel = (item: MyRequestItem): string => {
+    if (activeTab === 'Completed') return 'Completed';
+    if (item.requestStatus === 'won') return 'Accepted';
+    if (item.requestStatus === 'lost' || item.requestStatus === 'cancelled') return 'Declined Request';
+    return 'Request Submitted';
+  };
 
   const toCardItem = (item: MyRequestItem): FoodDetailItem => ({
     id: item.id,
@@ -193,7 +208,7 @@ export default function MyRequestsScreen() {
             <View key={item.id} style={styles.cardWrap}>
               <FoodCard
                 item={toCardItem(item)}
-                claimLabel={activeTab === 'Completed' ? 'Completed' : 'Request Submitted'}
+                claimLabel={getClaimLabel(item)}
                 claimButtonVariant="outline"
                 claimButtonBgColor={colors.inputFieldBg}
                 claimButtonTextColor={colors.textSecondary}

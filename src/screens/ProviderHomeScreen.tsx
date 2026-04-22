@@ -32,10 +32,9 @@ import CheckMarkHeart from '../assets/svgs/CheckMarkHeart';
 import BoxIcon from '../assets/svgs/BoxIcon';
 import ThreelinesIcon from '../assets/svgs/ThreelinesIcon';
 import { fetchAnalyticsSummaryApi } from '../lib/api/analytics';
+import { useNotificationInboxStore } from '../../store/notificationInboxStore';
 
 const defaultAvatar = require('../assets/images/Avatar.png');
-
-const NOTIFICATION_COUNT = 2;
 
 export default function ProviderHomeScreen() {
   const theme = useThemeStore((s) => s.theme);
@@ -45,6 +44,7 @@ export default function ProviderHomeScreen() {
   const insets = useSafeAreaInsets();
   const profile = useAuthStore((s) => s.profile);
   const userRole = useAuthStore((s) => s.userRole);
+  const notificationUnreadCount = useNotificationInboxStore((s) => s.unreadCount);
   const providerHomeAvatarUri = avatarUriWithCacheBust(profile?.avatar_url, profile?.updated_at);
   const allListings = useProviderListingsStore((s) => s.listings);
   const setListings = useProviderListingsStore((s) => s.setListings);
@@ -205,7 +205,7 @@ export default function ProviderHomeScreen() {
         <View style={styles.content}>
           <HomeHeader
             userName={getDisplayName(profile) || undefined}
-            notificationCount={NOTIFICATION_COUNT}
+            notificationCount={notificationUnreadCount}
             streakText={streakText}
             avatarSource={
               providerHomeAvatarUri

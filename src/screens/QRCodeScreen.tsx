@@ -33,6 +33,7 @@ function QRCodeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'QRCodeScreen'>>();
   const route = useRoute<RouteProp<RootStackParamList, 'QRCodeScreen'>>();
   const listingIdFromRoute = route.params?.listingId;
+  const recipientIdFromRoute = route.params?.recipientId;
   const mode = route.params?.mode ?? 'scan';
   const [torchOn, setTorchOn] = useState(false);
   const [scanned, setScanned] = useState(false);
@@ -60,7 +61,7 @@ function QRCodeScreen() {
 
     (async () => {
       setPinLoading(true);
-      const { pin: newPin, error } = await generatePickupPinApi(listingIdFromRoute);
+      const { pin: newPin, error } = await generatePickupPinApi(listingIdFromRoute, recipientIdFromRoute);
       if (cancelled) return;
       if (error || !newPin) {
         setPinLoading(false);
@@ -74,7 +75,7 @@ function QRCodeScreen() {
     return () => {
       cancelled = true;
     };
-  }, [listingIdFromRoute, mode]);
+  }, [listingIdFromRoute, mode, recipientIdFromRoute]);
 
   useEffect(() => {
     const loop = Animated.loop(

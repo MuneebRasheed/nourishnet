@@ -125,6 +125,11 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   }
 
   const token = session?.access_token;
+  if (!token) {
+    // Ensure local client state is explicitly signed out instead of silently
+    // continuing with unauthenticated API requests.
+    await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+  }
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
   return headers;
@@ -211,33 +216,75 @@ export function listingHasZeroQuantity(listing: Pick<ProviderListing, 'quantity'
 }
 
 /**
- * PATCH each open listing with zero quantity to `completed` so recipient browse + provider Active tab stay correct.
+ * Legacy compatibility helper.
+ * Completion is now driven by pickup verification flow on the backend,
+ * so quantity=0 is not auto-finalized on read.
  */
 export async function finalizeZeroQuantityListingsOnServer(listings: ProviderListing[]): Promise<ProviderListing[]> {
-  const byId = new Map(listings.map((l) => [l.id, l]));
-  const targets = listings.filter(
-    (l) => LISTING_STATUSES_OPEN_FOR_COMPLETION.includes(l.status) && listingHasZeroQuantity(l)
-  );
-  for (const l of targets) {
-    const { listing, error } = await completeListingApi(l.id);
-    if (listing && !error) {
-      byId.set(l.id, listing);
-    } else {
-      byId.set(l.id, { ...l, status: 'completed' });
-    }
-  }
-  return listings.map((l) => byId.get(l.id) ?? l);
+  const _openStatuses = LISTING_STATUSES_OPEN_FOR_COMPLETION;
+  void _openStatuses;
+  return listings;
 }
 
-/** Fetches provider listings then completes any with quantity 0 that are still open. */
+/**
+ * Defensive client-side normalization for mixed backend versions:
+ * - keep listings active when accepted recipients are still unverified
+ * - move listings to completed when quantity is 0 and all accepted recipients are verified
+ */
+async function reconcileProviderListingCompletionState(
+  listings: ProviderListing[]
+): Promise<ProviderListing[]> {
+  const listingIds = listings.map((l) => l.id);
+  if (listingIds.length === 0) return listings;
+
+  const { data: wonRows, error: wonError } = await supabase
+    .from('listing_requests')
+    .select('listing_id, recipient_id')
+    .in('listing_id', listingIds)
+    .eq('status', 'won');
+  if (wonError) return listings;
+
+  const { data: verifiedRows, error: verifiedError } = await supabase
+    .from('impact_events')
+    .select('listing_id, recipient_id')
+    .in('listing_id', listingIds)
+    .eq('event_type', 'pickup_verified');
+  if (verifiedError) return listings;
+
+  const verified = new Set(
+    (verifiedRows ?? []).map((r) => `${String(r.listing_id)}::${String(r.recipient_id)}`)
+  );
+  const hasWonUnverified = new Set<string>();
+  for (const row of wonRows ?? []) {
+    const lid = String(row.listing_id);
+    const key = `${String(row.listing_id)}::${String(row.recipient_id)}`;
+    if (!verified.has(key)) hasWonUnverified.add(lid);
+  }
+
+  return listings.map((l) => {
+    if (l.status === 'cancelled') return l;
+    const qtyZero = listingHasZeroQuantity(l);
+    if (qtyZero && !hasWonUnverified.has(l.id)) {
+      return l.status === 'completed' ? l : { ...l, status: 'completed' };
+    }
+    if (hasWonUnverified.has(l.id)) {
+      return l.status === 'active' ? l : { ...l, status: 'active' };
+    }
+    // If quantity is not zero and no pending accepted-verification work remains,
+    // preserve backend status as-is.
+    return l;
+  });
+}
+
+/** Fetches provider listings without client-side status mutation. */
 export async function fetchProviderListingsWithZeroQuantityResolved(): Promise<{
   listings: ProviderListing[];
   error?: string;
 }> {
   const { listings, error } = await fetchListingsApi();
   if (error) return { listings: [], error };
-  const normalized = await finalizeZeroQuantityListingsOnServer(listings);
-  return { listings: normalized };
+  const reconciled = await reconcileProviderListingCompletionState(listings);
+  return { listings: reconciled };
 }
 
 export async function fetchBrowseListingsApi(): Promise<{ listings: ProviderListing[]; error?: string }> {
@@ -270,10 +317,28 @@ export async function requestClaimApi(listingId: string): Promise<{ request: any
   return { request: data.request ?? null };
 }
 
-export async function generatePickupPinApi(listingId: string): Promise<{ pin: string | null; error?: string }> {
+export async function generatePickupPinApi(
+  listingId: string,
+  recipientId?: string
+): Promise<{ pin: string | null; error?: string }> {
   // Use Supabase RPC directly so we don't depend on the local Express API being reachable
   // from the simulator/device.
-  const { data, error } = await supabase.rpc('provider_generate_pickup_pin', { p_listing_id: listingId });
+  const params: { p_listing_id: string; p_recipient_id?: string } = { p_listing_id: listingId };
+  if (recipientId) params.p_recipient_id = recipientId;
+  let { data, error } = await supabase.rpc('provider_generate_pickup_pin', params);
+
+  // Backward compatibility: some environments still have the old signature
+  // provider_generate_pickup_pin(p_listing_id uuid).
+  if (
+    error &&
+    recipientId &&
+    String(error.message || '').includes('provider_generate_pickup_pin(p_listing_id, p_recipient_id)')
+  ) {
+    const fallback = await supabase.rpc('provider_generate_pickup_pin', { p_listing_id: listingId });
+    data = fallback.data;
+    error = fallback.error;
+  }
+
   if (error) {
     const msg = (error.message || '').trim();
     const mapped =
@@ -283,6 +348,8 @@ export async function generatePickupPinApi(listingId: string): Promise<{ pin: st
           ? 'You are not allowed to generate a PIN for this listing.'
           : msg === 'listing_not_claimed'
             ? 'This listing must be claimed before you can generate a pickup PIN.'
+            : msg === 'recipient_not_accepted'
+              ? 'Pickup PIN can be generated only for an accepted recipient.'
             : msg || 'Failed to generate pickup PIN';
     return { pin: null, error: mapped };
   }
@@ -431,7 +498,6 @@ async function fetchPickupVerifiedListingIdsForUser(listingIds: string[]): Promi
 
 function myRequestRowIsCompleted(row: MyRequestRow, pickupVerifiedListingIds: Set<string>): boolean {
   if (pickupVerifiedListingIds.has(row.listing_id)) return true;
-  if (row.listing_status === 'completed' && row.request_status === 'won') return true;
   return false;
 }
 
@@ -477,13 +543,25 @@ export async function fetchMyRequestsApi(): Promise<{
   error?: string;
 }> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE_URL}/listings/my-requests`, { method: 'GET', headers });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
+  if (!headers.Authorization) {
     return {
       active: [],
       completed: [],
-      error: data?.error ?? 'Failed to fetch my requests',
+      error: 'Your session expired. Please log in again.',
+    };
+  }
+  const res = await fetch(`${API_BASE_URL}/listings/my-requests`, { method: 'GET', headers });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const raw = String(data?.error ?? '').trim();
+    const mapped =
+      raw === 'Server auth is not configured or missing Authorization header'
+        ? 'Your session expired. Please log in again.'
+        : raw || 'Failed to fetch my requests';
+    return {
+      active: [],
+      completed: [],
+      error: mapped,
     };
   }
   const rows = (Array.isArray(data.requests) ? data.requests : []) as MyRequestRow[];

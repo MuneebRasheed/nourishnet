@@ -59,7 +59,7 @@ export type RootStackParamList = {
     /** Prefill pickup / gap when duplicating a prior listing (e.g. re-post from previous). */
     repostSourceListing?: ProviderListing;
   } | undefined;
-  QRCodeScreen: { listingId: string; mode?: 'scan' | 'show' };
+  QRCodeScreen: { listingId: string; mode?: 'scan' | 'show'; recipientId?: string };
   ListingRequestsScreen: { listingId: string; listingTitle: string };
   SubscriptionManagementScreen: undefined;
   ChangePasswordScreen: undefined;

@@ -13,7 +13,7 @@ export async function safeSignOut(): Promise<void> {
   if (session?.user?.id) {
     await clearExpoPushTokenFromProfile(session.user.id).catch(() => {});
   }
-  const { error } = await supabase.auth.signOut();
+  const { error } = await supabase.auth.signOut({ scope: 'local' });
   if (!error) return;
   const message = (error.message ?? '').toLowerCase();
   if (message.includes('refresh token') && message.includes('not found')) return;

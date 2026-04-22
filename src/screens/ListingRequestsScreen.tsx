@@ -24,7 +24,7 @@ import { PickupPinModal } from '../components/PickupPinModal';
 export type { ListingRequestItem };
 
 type RequestTab = 'Request' | 'Available';
-type ListingRequestWithRecipient = ListingRequestItem & { recipientId: string };
+type ListingRequestWithRecipient = ListingRequestItem & { recipientId: string; pickupComplete?: boolean };
 
 function formatTimeAgo(iso: string | null | undefined) {
   if (!iso) return 'just now';
@@ -123,6 +123,18 @@ export default function ListingRequestsScreen() {
       }
     }
 
+    const { data: verifiedPickups } = await supabase
+      .from('impact_events')
+      .select('recipient_id')
+      .eq('listing_id', listingId)
+      .eq('event_type', 'pickup_verified');
+
+    const verifiedRecipientIds = new Set(
+      (verifiedPickups ?? [])
+        .map((p) => p.recipient_id)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0)
+    );
+
     const toItem = (r: { id: string; recipient_id: string; created_at: string | null }): ListingRequestWithRecipient => {
       const profile = profilesById.get(r.recipient_id);
       const displayName =
@@ -140,6 +152,7 @@ export default function ListingRequestsScreen() {
         distance: recipientAddress,
         requestedAt: formatTimeAgo(r.created_at),
         priority: 'medium' as const,
+        pickupComplete: verifiedRecipientIds.has(r.recipient_id),
       };
     };
 
@@ -151,6 +164,29 @@ export default function ListingRequestsScreen() {
   useEffect(() => {
     fetchRequests();
   }, [fetchRequests]);
+
+  useEffect(() => {
+    if (!listingId) return;
+    const channel = supabase
+      .channel(`listing-requests-${listingId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'impact_events',
+          filter: `listing_id=eq.${listingId}`,
+        },
+        () => {
+          fetchRequests();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchRequests, listingId]);
 
   const handleBack = () => {
     if (navigation.canGoBack()) navigation.goBack();
@@ -196,83 +232,46 @@ export default function ListingRequestsScreen() {
     [fetchRequests]
   );
 
-  const ensureListingClaimedForRequest = useCallback(
+  const ensureRequestAccepted = useCallback(
     async (requestId: string, recipientId: string): Promise<boolean> => {
-      if (!listingId) return false;
-
-      const { data: beforeClaim, error: beforeClaimError } = await supabase
-        .from('listings')
-        .select('id, status, claimed_by')
-        .eq('id', listingId)
-        .single();
-
-      if (
-        !beforeClaimError &&
-        beforeClaim &&
-        beforeClaim.status === 'claimed' &&
-        typeof beforeClaim.claimed_by === 'string' &&
-        beforeClaim.claimed_by.length > 0
-      ) {
-        return true;
-      }
+      if (!listingId || !requestId || !recipientId) return false;
 
       const { error: acceptError } = await supabase.rpc('provider_accept_request', { p_request_id: requestId });
       if (acceptError && acceptError.message !== 'listing_not_available') {
-        console.error('[ListingRequestsScreen] ensure claim via provider_accept_request', acceptError);
+        console.error('[ListingRequestsScreen] ensure accepted via provider_accept_request', acceptError);
       }
 
-      // Legacy fallback: if older DB function marked request as won but did not claim the listing,
-      // claim it directly for the accepted recipient.
-      const { error: claimDirectError } = await supabase
-        .from('listings')
-        .update({
-          status: 'claimed',
-          claimed_by: recipientId,
-          claimed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', listingId)
-        .or(`claimed_by.is.null,claimed_by.eq.${recipientId}`);
-
-      if (claimDirectError) {
-        console.error('[ListingRequestsScreen] direct claim fallback failed', claimDirectError);
-      }
-
-      const { data: afterClaim, error: afterClaimError } = await supabase
-        .from('listings')
-        .select('status, claimed_by')
-        .eq('id', listingId)
-        .single();
-
-      if (afterClaimError) return false;
-      return (
-        afterClaim?.status === 'claimed' &&
-        typeof afterClaim.claimed_by === 'string' &&
-        afterClaim.claimed_by.length > 0
-      );
+      const { data: reqRow, error: reqError } = await supabase
+        .from('listing_requests')
+        .select('status')
+        .eq('id', requestId)
+        .eq('recipient_id', recipientId)
+        .maybeSingle();
+      if (reqError) return false;
+      return reqRow?.status === 'won';
     },
     [listingId]
   );
 
   const handleQRCode = async (requestId: string, recipientId: string) => {
     if (!listingId) return;
-    const claimed = await ensureListingClaimedForRequest(requestId, recipientId);
-    if (!claimed) {
+    const accepted = await ensureRequestAccepted(requestId, recipientId);
+    if (!accepted) {
       Alert.alert('Unable to generate QR', 'Please accept the request again and try once more.');
       return;
     }
-    navigation.navigate('QRCodeScreen', { listingId, mode: 'show' });
+    navigation.navigate('QRCodeScreen', { listingId, mode: 'show', recipientId });
   };
 
   const handlePinCode = async (requestId: string, recipientId: string) => {
     if (!listingId || !requestId) return;
-    const claimed = await ensureListingClaimedForRequest(requestId, recipientId);
-    if (!claimed) {
+    const accepted = await ensureRequestAccepted(requestId, recipientId);
+    if (!accepted) {
       Alert.alert('Unable to generate PIN', 'Please accept the request again and try once more.');
       return;
     }
 
-    const { pin, error } = await generatePickupPinApi(listingId);
+    const { pin, error } = await generatePickupPinApi(listingId, recipientId);
     if (error || !pin) {
       Alert.alert('Unable to generate PIN', error ?? 'Please try again.');
       return;
@@ -510,6 +509,7 @@ export default function ListingRequestsScreen() {
                 key={req.id}
                 item={req}
                 variant="accepted"
+                pickupComplete={Boolean(req.pickupComplete)}
                 onQRCode={() => handleQRCode(req.id, req.recipientId)}
                 onPinCode={() => handlePinCode(req.id, req.recipientId)}
               />
