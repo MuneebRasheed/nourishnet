@@ -100,12 +100,14 @@ export function RequestCard({
                 styles.metaText,
                 { color: colors.textSecondary, fontFamily: fontFamilies.inter, fontSize: fonts.caption },
               ]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
             >
               {item.distance} • Requested {item.requestedAt}
             </Text>
           </View>
         </View>
-        <View style={[styles.priorityBadge, { backgroundColor: priorityBg }]}>
+        {/* <View style={[styles.priorityBadge, { backgroundColor: priorityBg }]}>
           <Text
             style={[
               styles.priorityText,
@@ -114,7 +116,7 @@ export function RequestCard({
           >
             {item.priority === 'high' ? 'High Priority' : 'Medium Priority'}
           </Text>
-        </View>
+        </View> */}
       </View>
       <View style={styles.actions}>
         {isAccepted ? (
@@ -234,7 +236,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
-  metaText: {},
+  metaText: {
+    flexShrink: 1,
+  },
   priorityBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,

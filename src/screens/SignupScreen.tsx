@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Platform } from 'react-native'
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Platform, KeyboardAvoidingView } from 'react-native'
 import React, { useEffect, useState } from 'react'
 import * as AppleAuthentication from 'expo-apple-authentication'
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
@@ -15,7 +15,6 @@ import AuthSeparator from '../components/AuthSeparator'
 import GoogleIcon from '../assets/svgs/GoogleIcon'
 import AppleIcon from '../assets/svgs/AppleIcon'
 import { RootStackParamList } from '../navigations/RootNavigation'
-import { supabase } from '../lib/supabase'
 import { API_BASE_URL } from '../lib/api/client'
 import { markOnboardingComplete } from '../lib/onboardingStorage'
 import { useAuthStore } from '../../store/authStore'
@@ -84,42 +83,14 @@ const SignupScreen = () => {
 
     setLoading(true)
     try {
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email: trimmedEmail,
-        password,
-      })
-      if (signUpError) {
-        setFormError(signUpError.message ?? 'Sign up failed. Please try again.')
-        return
-      }
-
-      if (role === 'recipient') {
-        if (!signUpData?.session) {
-          const { error: signInError } = await supabase.auth.signInWithPassword({
-            email: trimmedEmail,
-            password,
-          })
-          if (signInError) {
-            setFormError(
-              signInError.message ??
-                'Account created but sign-in failed. In Supabase Auth, disable “Confirm email” for signups, or use the verification email link, then log in.'
-            )
-            return
-          }
-        }
-        await markOnboardingComplete()
-        navigation.replace('EditProfileScreen', { email: trimmedEmail })
-        return
-      }
-
-      const res = await fetch(`${API_BASE_URL}/auth/send-signup-otp`, {
+      const res = await fetch(`${API_BASE_URL}/auth/start-signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: trimmedEmail }),
+        body: JSON.stringify({ email: trimmedEmail, role: role ?? 'recipient' }),
       })
       const body = await res.json().catch(() => ({}))
-      if (!res.ok && body?.error) {
-        setFormError(body.error)
+      if (!res.ok) {
+        setFormError(body?.error ?? 'Sign up failed. Please try again.')
         return
       }
       await markOnboardingComplete()
@@ -158,10 +129,15 @@ const SignupScreen = () => {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+    <KeyboardAvoidingView
+      style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
+    >
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.content}>
@@ -353,7 +329,7 @@ const SignupScreen = () => {
           </View>
         </View>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   )
 }
 

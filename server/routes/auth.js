@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const nodemailer = require('nodemailer');
+const crypto = require('crypto');
 
 const router = Router();
 const supabaseUrl = process.env.SUPABASE_URL ?? '';
@@ -11,6 +12,15 @@ const send = (res, body, status) => res.status(status).json(body);
 
 const OTP_EXPIRY_MINUTES = 15;
 const OTP_LENGTH = 6;
+const OTP_MAX_ATTEMPTS = 5;
+
+function normalizeEmail(email) {
+  return String(email ?? '').trim().toLowerCase();
+}
+
+function hashOtp(otp) {
+  return crypto.createHash('sha256').update(String(otp)).digest('hex');
+}
 
 function generateOtp() {
   const digits = '0123456789';
@@ -58,7 +68,7 @@ async function sendOtpEmail(to, otp, options = {}) {
 }
 
 async function findUserByEmail(admin, email) {
-  const normalized = email.trim().toLowerCase();
+  const normalized = normalizeEmail(email);
   let page = 1;
   const perPage = 100;
   while (true) {
@@ -72,29 +82,196 @@ async function findUserByEmail(admin, email) {
 }
 
 // ---------- Signup OTP ----------
-router.post('/send-signup-otp', async (req, res) => {
+router.post('/start-signup', async (req, res) => {
   try {
-    const email = typeof req.body?.email === 'string' ? req.body.email.trim() : '';
+    const email = normalizeEmail(req.body?.email);
+    const role = req.body?.role === 'provider' ? 'provider' : 'recipient';
     if (!email) {
       return send(res, { error: 'Email is required' }, 400);
     }
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
     const user = await findUserByEmail(supabaseAdmin, email);
-    if (!user) {
-      return send(res, { success: true }, 200);
+    if (user) {
+      return send(res, { error: 'An account with this email already exists.' }, 400);
     }
     const otp = generateOtp();
+    const otpHash = hashOtp(otp);
     const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000).toISOString();
     const { error: updateError } = await supabaseAdmin
-      .from('profiles')
-      .update({
-        signup_otp: otp,
+      .from('pending_signups')
+      .upsert({
+        email,
+        role,
+        signup_otp_hash: otpHash,
         signup_otp_expires_at: expiresAt,
+        otp_attempts: 0,
+        last_sent_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'email',
+      });
+    if (updateError) {
+      console.error('[start-signup] Pending signup update failed', updateError);
+      return send(res, { error: 'Failed to send code. Please try again.' }, 500);
+    }
+    const mailResult = await sendOtpEmail(email, otp, { subject: 'Your NourishNet verification code' });
+    if (mailResult.error) {
+      console.error('[start-signup] Send OTP email failed', mailResult.error);
+      return send(res, { error: 'Failed to send email. Please try again.' }, 500);
+    }
+    return send(res, { success: true }, 200);
+  } catch (e) {
+    console.error('[start-signup]', e);
+    return send(res, { error: 'Something went wrong' }, 500);
+  }
+});
+
+router.post('/resend-signup-otp', async (req, res) => {
+  try {
+    const email = normalizeEmail(req.body?.email);
+    if (!email) {
+      return send(res, { error: 'Email is required' }, 400);
+    }
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
+    const { data: pending, error: pendingError } = await supabaseAdmin
+      .from('pending_signups')
+      .select('email')
+      .eq('email', email)
+      .single();
+    if (pendingError || !pending) {
+      return send(res, { error: 'Please start signup again.' }, 400);
+    }
+    const otp = generateOtp();
+    const otpHash = hashOtp(otp);
+    const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000).toISOString();
+    const { error: updateError } = await supabaseAdmin
+      .from('pending_signups')
+      .update({
+        signup_otp_hash: otpHash,
+        signup_otp_expires_at: expiresAt,
+        otp_attempts: 0,
+        last_sent_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
-      .eq('id', user.id);
+      .eq('email', email);
     if (updateError) {
-      console.error('[send-signup-otp] Profile update failed', updateError);
+      console.error('[resend-signup-otp] Pending signup update failed', updateError);
+      return send(res, { error: 'Failed to send code. Please try again.' }, 500);
+    }
+    const mailResult = await sendOtpEmail(email, otp, { subject: 'Your NourishNet verification code' });
+    if (mailResult.error) {
+      console.error('[resend-signup-otp] Send OTP email failed', mailResult.error);
+      return send(res, { error: 'Failed to send email. Please try again.' }, 500);
+    }
+    return send(res, { success: true }, 200);
+  } catch (e) {
+    console.error('[resend-signup-otp]', e);
+    return send(res, { error: 'Something went wrong' }, 500);
+  }
+});
+
+router.post('/verify-signup-otp', async (req, res) => {
+  try {
+    const email = normalizeEmail(req.body?.email);
+    const otp = typeof req.body?.otp === 'string' ? req.body.otp.trim() : '';
+    const password = typeof req.body?.password === 'string' ? req.body.password : '';
+    if (!email || !otp) {
+      return send(res, { error: 'Email and code are required' }, 400);
+    }
+    if (password.length < 6) {
+      return send(res, { error: 'Password must be at least 6 characters' }, 400);
+    }
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
+    const user = await findUserByEmail(supabaseAdmin, email);
+    if (user) {
+      return send(res, { error: 'An account with this email already exists.' }, 400);
+    }
+    const { data: pending, error: pendingError } = await supabaseAdmin
+      .from('pending_signups')
+      .select('signup_otp_hash, signup_otp_expires_at, otp_attempts, role')
+      .eq('email', email)
+      .single();
+    if (pendingError || !pending) {
+      return send(res, { error: 'Invalid or expired code. Please request a new one.' }, 400);
+    }
+    if ((pending.otp_attempts ?? 0) >= OTP_MAX_ATTEMPTS) {
+      return send(res, { error: 'Too many attempts. Please request a new code.' }, 400);
+    }
+    if (
+      !pending.signup_otp_hash ||
+      !pending.signup_otp_expires_at ||
+      new Date(pending.signup_otp_expires_at) < new Date()
+    ) {
+      return send(res, { error: 'Invalid or expired code. Please request a new one.' }, 400);
+    }
+    if (pending.signup_otp_hash !== hashOtp(otp)) {
+      await supabaseAdmin
+        .from('pending_signups')
+        .update({
+          otp_attempts: (pending.otp_attempts ?? 0) + 1,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('email', email);
+      return send(res, { error: 'Invalid or expired code. Please request a new one.' }, 400);
+    }
+    const { data: createdAuth, error: createAuthError } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+    });
+    if (createAuthError || !createdAuth?.user?.id) {
+      return send(res, { error: createAuthError?.message ?? 'Failed to verify.' }, 400);
+    }
+    const { error: profileRoleError } = await supabaseAdmin
+      .from('profiles')
+      .update({
+        role: pending.role === 'provider' ? 'provider' : 'recipient',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', createdAuth.user.id);
+    if (profileRoleError) {
+      await supabaseAdmin.auth.admin.deleteUser(createdAuth.user.id);
+      return send(res, { error: 'Failed to finish signup. Please try again.' }, 500);
+    }
+    await supabaseAdmin.from('pending_signups').delete().eq('email', email);
+    return send(res, { success: true }, 200);
+  } catch (e) {
+    console.error('[verify-signup-otp]', e);
+    return send(res, { error: 'Something went wrong' }, 500);
+  }
+});
+
+// Backward-compatible alias for old clients
+router.post('/send-signup-otp', async (req, res) => {
+  try {
+    const email = normalizeEmail(req.body?.email);
+    if (!email) {
+      return send(res, { error: 'Email is required' }, 400);
+    }
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
+    const { data: pending, error: pendingError } = await supabaseAdmin
+      .from('pending_signups')
+      .select('email')
+      .eq('email', email)
+      .single();
+    if (pendingError || !pending) {
+      return send(res, { error: 'Please start signup again.' }, 400);
+    }
+    const otp = generateOtp();
+    const otpHash = hashOtp(otp);
+    const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000).toISOString();
+    const { error: updateError } = await supabaseAdmin
+      .from('pending_signups')
+      .update({
+        signup_otp_hash: otpHash,
+        signup_otp_expires_at: expiresAt,
+        otp_attempts: 0,
+        last_sent_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('email', email);
+    if (updateError) {
+      console.error('[send-signup-otp] Pending signup update failed', updateError);
       return send(res, { error: 'Failed to send code. Please try again.' }, 500);
     }
     const mailResult = await sendOtpEmail(email, otp, { subject: 'Your NourishNet verification code' });
@@ -105,55 +282,6 @@ router.post('/send-signup-otp', async (req, res) => {
     return send(res, { success: true }, 200);
   } catch (e) {
     console.error('[send-signup-otp]', e);
-    return send(res, { error: 'Something went wrong' }, 500);
-  }
-});
-
-router.post('/verify-signup-otp', async (req, res) => {
-  try {
-    const email = typeof req.body?.email === 'string' ? req.body.email.trim() : '';
-    const otp = typeof req.body?.otp === 'string' ? req.body.otp.trim() : '';
-    if (!email || !otp) {
-      return send(res, { error: 'Email and code are required' }, 400);
-    }
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
-    const user = await findUserByEmail(supabaseAdmin, email);
-    if (!user) {
-      return send(res, { error: 'Invalid or expired code. Please request a new one.' }, 400);
-    }
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .select('signup_otp, signup_otp_expires_at')
-      .eq('id', user.id)
-      .single();
-    if (profileError || !profile) {
-      return send(res, { error: 'Invalid or expired code. Please request a new one.' }, 400);
-    }
-    const storedOtp = profile.signup_otp;
-    const expiresAt = profile.signup_otp_expires_at;
-    if (!storedOtp || !expiresAt || new Date(expiresAt) < new Date()) {
-      return send(res, { error: 'Invalid or expired code. Please request a new one.' }, 400);
-    }
-    if (storedOtp !== otp) {
-      return send(res, { error: 'Invalid or expired code. Please request a new one.' }, 400);
-    }
-    const { error: updateAuthError } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
-      email_confirm: true,
-    });
-    if (updateAuthError) {
-      return send(res, { error: updateAuthError.message ?? 'Failed to verify.' }, 400);
-    }
-    await supabaseAdmin
-      .from('profiles')
-      .update({
-        signup_otp: null,
-        signup_otp_expires_at: null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', user.id);
-    return send(res, { success: true }, 200);
-  } catch (e) {
-    console.error('[verify-signup-otp]', e);
     return send(res, { error: 'Something went wrong' }, 500);
   }
 });

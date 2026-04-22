@@ -83,6 +83,11 @@ export function RecipientLocationField({
   }, []);
 
   useEffect(() => {
+    if (hasResolvedCoordinates) {
+      setPredictions([]);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      return;
+    }
     if (skipNextFetchRef.current) {
       skipNextFetchRef.current = false;
       return;
@@ -94,10 +99,11 @@ export function RecipientLocationField({
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [address, runAutocomplete]);
+  }, [address, hasResolvedCoordinates, runAutocomplete]);
 
   const selectPrediction = async (p: PlacePrediction) => {
     Keyboard.dismiss();
+    if (debounceRef.current) clearTimeout(debounceRef.current);
     setPredictions([]);
     const details = await fetchPlaceDetails(p.place_id);
     if (!details) return;
@@ -108,6 +114,7 @@ export function RecipientLocationField({
   const useCurrentLocation = async () => {
     if (!isGoogleMapsConfigured()) return;
     setLoadingGps(true);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
     setPredictions([]);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -217,7 +224,7 @@ export function RecipientLocationField({
         </Text>
       ) : null}
 
-      {predictions.length > 0 ? (
+      {predictions.length > 0 && !hasResolvedCoordinates ? (
         <View
           style={[
             styles.suggestions,

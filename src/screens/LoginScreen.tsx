@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View, TouchableOpacity, Pressable, Platform } from 'react-native'
+import { StyleSheet, Text, View, TouchableOpacity, Pressable, Platform, ScrollView, KeyboardAvoidingView } from 'react-native'
 import React, { useEffect, useState } from 'react'
 import * as AppleAuthentication from 'expo-apple-authentication'
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
@@ -29,9 +29,9 @@ const LoginScreen = () => {
   const fonts = useAppFontSizes()
 
   const [mode, setMode] = useState<'email' | 'phone'>('email')
-  const [email, setEmail] = useState( role === 'provider' ? 'test13@gmail.com' : 'test12@gmail.com')
+  const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
-  const [password, setPassword] = useState('Muneeb123@')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [oauthLoading, setOauthLoading] = useState<'google' | 'apple' | null>(null)
   const [appleAuthAvailable, setAppleAuthAvailable] = useState(false)
@@ -113,7 +113,17 @@ const LoginScreen = () => {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <KeyboardAvoidingView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
+    >
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        showsVerticalScrollIndicator={false}
+      >
       <View style={styles.content}>
       <SplashIcon width={66} height={62} style={{alignSelf:"center",marginTop:20}} />
 
@@ -330,7 +340,8 @@ const LoginScreen = () => {
         </View>
         
       </View>
-    </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   )
 }
 
@@ -339,6 +350,9 @@ export default LoginScreen
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   content: {
     paddingTop: 80,

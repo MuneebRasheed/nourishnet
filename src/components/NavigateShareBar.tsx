@@ -40,6 +40,7 @@ export default function NavigateShareBar({
           Navigate
         </Text>
       </TouchableOpacity>
+      {/*
       <TouchableOpacity
         onPress={onShare}
         activeOpacity={0.8}
@@ -47,6 +48,7 @@ export default function NavigateShareBar({
       >
         <ShareIcon width={20} height={20} color={colors.text} />
       </TouchableOpacity>
+      */}
     </View>
   );
 }

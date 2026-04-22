@@ -373,7 +373,7 @@ export default function SearchTabScreen() {
         onRightPress={handleTurnOff}
         rightIcon={
           turningOff ? (
-            <ActivityIndicator color={palette.logoutColor} />
+            <ActivityIndicator color={colors.primary} />
           ) : (
             <Text
               style={[

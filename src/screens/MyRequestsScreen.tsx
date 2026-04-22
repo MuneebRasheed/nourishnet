@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Platform,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -37,20 +38,23 @@ export default function MyRequestsScreen() {
   const [activeRequests, setActiveRequests] = useState<MyRequestItem[]>([]);
   const [completedRequests, setCompletedRequests] = useState<MyRequestItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadMyRequests = useCallback(async () => {
-    setLoading(true);
+  const loadMyRequests = useCallback(async (mode: 'initial' | 'refresh' = 'initial') => {
+    if (mode === 'initial') setLoading(true);
+    else setRefreshing(true);
     setError(null);
     const { active, completed, error: err } = await fetchMyRequestsApi();
-    setLoading(false);
+    if (mode === 'initial') setLoading(false);
+    else setRefreshing(false);
     if (err) {
       setError(err);
       return;
     }
     setActiveRequests(active);
     setCompletedRequests(completed);
-    setRequestedIds(active.map((r) => r.id));
+    setRequestedIds([...active, ...completed].map((r) => r.id));
   }, [setRequestedIds]);
 
   useFocusEffect(
@@ -66,6 +70,7 @@ export default function MyRequestsScreen() {
   });
 
   const requests = activeTab === 'Active' ? activeRequests : completedRequests;
+  const topRefreshOffset = 20;
 
   const toCardItem = (item: MyRequestItem): FoodDetailItem => ({
     id: item.id,
@@ -125,6 +130,17 @@ export default function MyRequestsScreen() {
           { paddingBottom: insets.bottom + 100 },
         ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => loadMyRequests('refresh')}
+            tintColor={colors.primary}
+            titleColor={colors.primary}
+            colors={[colors.primary]}
+            progressBackgroundColor={isDark ? colors.inputFieldBg : palette.white}
+            progressViewOffset={topRefreshOffset}
+          />
+        }
       >
         {loading ? (
           <View style={styles.loadingWrap}>

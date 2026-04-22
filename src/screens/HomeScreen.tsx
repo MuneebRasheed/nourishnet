@@ -83,13 +83,39 @@ function formatPostedAgo(createdAt: string): string {
   return `${days} day${days > 1 ? 's' : ''} ago`;
 }
 
-function providerListingToDetailItem(listing: ProviderListing): FoodDetailItem {
+function shortLocation(address: string | null | undefined, maxChars = 18): string {
+  const trimmed = typeof address === 'string' ? address.trim() : '';
+  if (!trimmed) return 'Unknown location';
+  if (trimmed.length <= maxChars) return trimmed;
+  return `${trimmed.slice(0, maxChars).trimEnd()}...`;
+}
+
+function providerListingToDetailItem(
+  listing: ProviderListing,
+  recipientLat: number | null,
+  recipientLng: number | null
+): FoodDetailItem {
+  let distanceText = shortLocation(listing.pickupAddress);
+  if (
+    recipientLat != null &&
+    recipientLng != null &&
+    listing.pickupLatitude != null &&
+    listing.pickupLongitude != null
+  ) {
+    const meters = haversineMeters(
+      listing.pickupLatitude,
+      listing.pickupLongitude,
+      recipientLat,
+      recipientLng
+    );
+    if (Number.isFinite(meters)) distanceText = `${(meters / 1000).toFixed(1)} km`;
+  }
   return {
     id: listing.id,
     image: listing.imageUrl ? { uri: listing.imageUrl } : DEFAULT_LISTING_IMAGE,
     title: listing.title,
     source: 'Provider',
-    distance: '—',
+    distance: distanceText,
     postedAgo: formatPostedAgo(listing.createdAt),
     portions: `${listing.quantity} ${listing.quantityUnit}`,
     timeSlot: `${listing.startTime} - ${listing.endTime}`,
@@ -122,8 +148,6 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [streakText, setStreakText] = useState('0-day streak');
-  /** Unique Realtime topic per subscription — reused topic + `.on()` after `subscribe()` throws. */
-  const listingsRecipientFeedChannelSeq = useRef(0);
   /** Bumps on Realtime effect cleanup so stagger timers from a previous subscription do not update state. */
   const recipientFeedRealtimeGen = useRef(0);
   /** INSERT → refetch after preference gap (no second Realtime event at eligible time). */
@@ -173,7 +197,17 @@ export default function HomeScreen() {
         : null;
     const hasRecipientCoords = recipientLat != null && recipientLng != null;
 
-    const channelTopic = `listings-recipient-feed:${profile?.id ?? 'user'}:${++listingsRecipientFeedChannelSeq.current}`;
+    const recipientFeedTopicPrefix = `listings-recipient-feed:${profile?.id ?? 'user'}:`;
+    for (const existingChannel of supabase.getChannels()) {
+      const topic = (existingChannel as { topic?: string }).topic ?? '';
+      if (topic.includes(recipientFeedTopicPrefix)) {
+        void supabase.removeChannel(existingChannel);
+      }
+    }
+
+    const channelTopic = `${recipientFeedTopicPrefix}${Date.now()}:${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
     const channel = supabase
       .channel(channelTopic)
       .on(
@@ -246,7 +280,7 @@ export default function HomeScreen() {
       staggerRevealTimersRef.current.clear();
       void supabase.removeChannel(channel);
     };
-  }, [userRole, profile?.latitude, profile?.longitude]);
+  }, [userRole, profile?.id, profile?.latitude, profile?.longitude]);
 
   useEffect(() => {
     let cancelled = false;
@@ -295,8 +329,20 @@ export default function HomeScreen() {
     });
   }, [activeListings, recipientCompletedListingIds]);
   const listingItems = useMemo(
-    () => mergedActiveListings.map(providerListingToDetailItem),
-    [mergedActiveListings]
+    () => {
+      const recipientLat =
+        profile?.latitude != null && Number.isFinite(Number(profile.latitude))
+          ? Number(profile.latitude)
+          : null;
+      const recipientLng =
+        profile?.longitude != null && Number.isFinite(Number(profile.longitude))
+          ? Number(profile.longitude)
+          : null;
+      return mergedActiveListings.map((listing) =>
+        providerListingToDetailItem(listing, recipientLat, recipientLng)
+      );
+    },
+    [mergedActiveListings, profile?.latitude, profile?.longitude]
   );
   const baseList = listingItems;
   const [search, setSearch] = useState('');
@@ -398,7 +444,11 @@ export default function HomeScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={colors.primary}
+            tintColor={palette.roleBulbColor2}
+            titleColor={palette.roleBulbColor2}
+            colors={[palette.roleBulbColor2]}
+            progressBackgroundColor={isDark ? colors.inputFieldBg : palette.white}
+            progressViewOffset={insets.top + 40}
           />
         }
       >

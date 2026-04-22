@@ -1,4 +1,5 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { NavigatorScreenParams } from '@react-navigation/native';
 import SplashScreen from '../screens/SplashScreen';
 import ThemeFontsTestScreen from '../screens/ThemeFontTestScreen';
 import ThemeScreen from '../screens/ThemeScreen';
@@ -19,6 +20,7 @@ import PostFoodScreen, { PostFoodDraft } from '../screens/PostFoodScreen';
 import type { ProviderListing } from '../../store/providerListingsStore';
 import PostPublishScreen from '../screens/PostPublishScreen';
 import QRCodeScreen from '../screens/QRCodeScreen';
+import ListingRequestsScreen from '../screens/ListingRequestsScreen';
 import MainTabNavigator, { MainTabParamList } from './MainTabNavigator';
 import ProviderProfileScreen from '../screens/ProviderProfileScreen';
 
@@ -63,7 +65,7 @@ export type RootStackParamList = {
   ChangePasswordScreen: undefined;
   TermsAndConditionsScreen: undefined;
   PrivacyPolicyScreen: undefined;
-  MainTabs: { screen?: keyof MainTabParamList } | undefined;
+  MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -156,6 +158,11 @@ function RootNavigation() {
       <Stack.Screen
         name="QRCodeScreen"
         component={QRCodeScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="ListingRequestsScreen"
+        component={ListingRequestsScreen}
         options={{ headerShown: false }}
       />
       

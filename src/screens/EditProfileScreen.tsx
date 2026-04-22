@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { StyleSheet, Text, View, ScrollView } from 'react-native'
+import { StyleSheet, Text, View, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useThemeStore } from '../../store/themeStore'
 import { getColors } from '../../utils/colors'
@@ -17,6 +17,7 @@ import { useAuthStore } from '../../store/authStore'
 import { supabase } from '../lib/supabase'
 import { pickImage, uploadAvatar } from '../lib/uploadAvatar'
 import { fetchProfile } from '../lib/profile'
+import ArrowBACK from '../assets/svgs/ArrowBACK'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EditProfileScreen'>
 
@@ -72,6 +73,10 @@ const EditProfileScreen = ({ route }: Props) => {
       setProfileImageUri(result.uri)
       setProfileImageBase64(result.base64)
     }
+  }
+
+  const handleBack = () => {
+    if (navigation.canGoBack()) navigation.goBack()
   }
 
   const handleCompleteProfile = async () => {
@@ -147,11 +152,13 @@ const EditProfileScreen = ({ route }: Props) => {
   }
 
   return (
-    <View
+    <KeyboardAvoidingView
       style={[
         styles.container,
         { backgroundColor: colors.background, paddingTop: insets.top },
       ]}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
     >
       <ScrollView
         contentContainerStyle={[
@@ -159,9 +166,17 @@ const EditProfileScreen = ({ route }: Props) => {
           { paddingBottom: insets.bottom + 24 },
         ]}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.content}>
+          <TouchableOpacity
+            onPress={handleBack}
+            activeOpacity={0.8}
+            style={[styles.backBtn, { backgroundColor: colors.inputFieldBg }]}
+          >
+            <ArrowBACK width={22} height={22} color={colors.text} />
+          </TouchableOpacity>
           <View style={{alignItems: 'center'}}>
 
         
@@ -263,7 +278,7 @@ const EditProfileScreen = ({ route }: Props) => {
           </Text>
         </View>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   )
 }
 
@@ -275,11 +290,19 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-   
+    paddingBottom: 12,
   },
   content: {
     paddingHorizontal: 16,
     paddingTop: 10,
+  },
+  backBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
   },
   title: {
     marginBottom: 6,

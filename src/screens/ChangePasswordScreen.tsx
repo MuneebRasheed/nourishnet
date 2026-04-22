@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Modal, Pressable, Text, Platform, Dimensions } from 'react-native';
+import { View, StyleSheet, ScrollView, Modal, Pressable, Text, Platform, Dimensions, KeyboardAvoidingView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -148,7 +148,7 @@ export default function ChangePasswordScreen() {
   };
 
   return (
-    <View
+    <KeyboardAvoidingView
       style={[
         styles.wrapper,
         {
@@ -157,6 +157,8 @@ export default function ChangePasswordScreen() {
           paddingBottom: insets.bottom,
         },
       ]}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
     >
       <SettingsHeader
         title="Change Password"
@@ -171,6 +173,7 @@ export default function ChangePasswordScreen() {
           { paddingBottom: insets.bottom + 24 },
         ]}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
       >
         <AuthInput
           type="password"
@@ -285,7 +288,7 @@ export default function ChangePasswordScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

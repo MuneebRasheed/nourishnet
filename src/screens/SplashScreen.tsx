@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import type { Session } from '@supabase/supabase-js';
 import { StyleSheet, View, Text } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -14,8 +15,8 @@ import { supabase } from '../lib/supabase';
 import { fetchProfile, needsProfileCompletion } from '../lib/profile';
 import { hasCompletedOnboarding } from '../lib/onboardingStorage';
 
-/** Brief delay after Zustand rehydration so Supabase client can read its session from AsyncStorage. */
-const POST_HYDRATE_DELAY_MS = 150;
+/** Upper bound while waiting for Supabase INITIAL_SESSION after app refresh. */
+const INITIAL_SESSION_TIMEOUT_MS = 2000;
 
 function waitForAuthStoreHydration(): Promise<void> {
   return new Promise((resolve) => {
@@ -28,6 +29,49 @@ function waitForAuthStoreHydration(): Promise<void> {
       resolve();
     });
   });
+}
+
+async function waitForSupabaseInitialSession(): Promise<void> {
+  let finished = false;
+  await new Promise<void>((resolve) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (event !== 'INITIAL_SESSION' || finished) return;
+      finished = true;
+      clearTimeout(timer);
+      subscription.unsubscribe();
+      resolve();
+    });
+
+    const timer = setTimeout(() => {
+      if (finished) return;
+      finished = true;
+      subscription.unsubscribe();
+      resolve();
+    }, INITIAL_SESSION_TIMEOUT_MS);
+  });
+}
+
+async function getStableSession(): Promise<Session | null> {
+  const {
+    data: { session: initialSession },
+  } = await supabase.auth.getSession();
+  if (initialSession) return initialSession;
+
+  // If getSession() races before auth hydration/refresh, attempt one refresh pass.
+  const { error: refreshError } = await supabase.auth.refreshSession();
+  if (refreshError) {
+    const message = (refreshError.message ?? '').toLowerCase();
+    if (!(message.includes('refresh token') && message.includes('not found'))) {
+      console.warn('Session refresh failed during splash restore:', refreshError.message);
+    }
+  }
+
+  const {
+    data: { session: refreshedSession },
+  } = await supabase.auth.getSession();
+  return refreshedSession ?? null;
 }
 
 /**
@@ -49,9 +93,9 @@ const SplashScreen = () => {
     let cancelled = false;
     const run = async () => {
       await waitForAuthStoreHydration();
-      await new Promise((r) => setTimeout(r, POST_HYDRATE_DELAY_MS));
+      await waitForSupabaseInitialSession();
       if (cancelled) return;
-      const { data: { session } } = await supabase.auth.getSession();
+      const session = await getStableSession();
       if (cancelled) return;
       if (session?.user) {
         const profile = await fetchProfile(session.user.id);

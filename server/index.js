@@ -26,7 +26,9 @@ app.get('/api', (req, res) => {
     endpoints: [
       '/health',
       '/api',
+      '/auth/start-signup',
       '/auth/send-signup-otp',
+      '/auth/resend-signup-otp',
       '/auth/verify-signup-otp',
       '/auth/forgot-password',
       '/auth/verify-reset-otp',

@@ -5,6 +5,7 @@ import {
   Text,
   View,
   ScrollView,
+  RefreshControl,
   ImageSourcePropType,
   TouchableOpacity,
 } from 'react-native';
@@ -51,35 +52,42 @@ export default function ProviderHomeScreen() {
   const addListingFromApi = useProviderListingsStore((s) => s.addListingFromApi);
   const [streakText, setStreakText] = useState('0-day streak');
   const [mealsRescuedTotal, setMealsRescuedTotal] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const topRefreshOffset = insets.top + 40;
+
+  const loadProviderHomeData = useCallback(async () => {
+    const analyticsPromise =
+      userRole === 'provider' || userRole === 'recipient'
+        ? fetchAnalyticsSummaryApi(userRole)
+        : Promise.resolve(
+            { summary: null } as Awaited<ReturnType<typeof fetchAnalyticsSummaryApi>>
+          );
+    const [listingsRes, analyticsRes] = await Promise.all([
+      fetchProviderListingsWithZeroQuantityResolved(),
+      analyticsPromise,
+    ]);
+    if (!listingsRes.error) setListings(listingsRes.listings);
+
+    if (userRole === 'provider' || userRole === 'recipient') {
+      if (analyticsRes.summary) {
+        setStreakText(`${analyticsRes.summary.streakDays}-day streak`);
+        setMealsRescuedTotal(analyticsRes.summary.meals);
+      } else {
+        setStreakText('0-day streak');
+        setMealsRescuedTotal(0);
+      }
+    }
+  }, [setListings, userRole]);
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
       (async () => {
-        const analyticsPromise =
-          userRole === 'provider' || userRole === 'recipient'
-            ? fetchAnalyticsSummaryApi(userRole)
-            : Promise.resolve(
-                { summary: null } as Awaited<ReturnType<typeof fetchAnalyticsSummaryApi>>
-              );
-        const [listingsRes, analyticsRes] = await Promise.all([
-          fetchProviderListingsWithZeroQuantityResolved(),
-          analyticsPromise,
-        ]);
-        if (!cancelled && !listingsRes.error) setListings(listingsRes.listings);
-
-        if (!cancelled && (userRole === 'provider' || userRole === 'recipient')) {
-          if (analyticsRes.summary) {
-            setStreakText(`${analyticsRes.summary.streakDays}-day streak`);
-            setMealsRescuedTotal(analyticsRes.summary.meals);
-          } else {
-            setStreakText('0-day streak');
-            setMealsRescuedTotal(0);
-          }
-        }
+        await loadProviderHomeData();
+        if (cancelled) return;
       })();
       return () => { cancelled = true; };
-    }, [setListings, userRole])
+    }, [loadProviderHomeData])
   );
 
   const ACTIVE_LISTING_STATUSES = useMemo(
@@ -102,6 +110,13 @@ export default function ProviderHomeScreen() {
 
   const handleViewListings = () => {
     navigation.navigate('MainTabs', { screen: 'Listings' });
+  };
+
+  const handleViewRequests = (listing: ProviderListing) => {
+    navigation.navigate('ListingRequestsScreen', {
+      listingId: listing.id,
+      listingTitle: listing.title || 'Food name',
+    });
   };
 
   const handleTrackImpact = () => {
@@ -168,6 +183,24 @@ export default function ProviderHomeScreen() {
           { paddingTop: insets.top, paddingBottom: insets.bottom + 100 },
         ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={async () => {
+              setRefreshing(true);
+              try {
+                await loadProviderHomeData();
+              } finally {
+                setRefreshing(false);
+              }
+            }}
+            tintColor={palette.roleBulbColor2}
+            titleColor={palette.roleBulbColor2}
+            colors={[palette.roleBulbColor2]}
+            progressBackgroundColor={isDark ? colors.inputFieldBg : palette.white}
+            progressViewOffset={topRefreshOffset}
+          />
+        }
       >
         <View style={styles.content}>
           <HomeHeader
@@ -341,7 +374,7 @@ export default function ProviderHomeScreen() {
                 foodType={listing.foodType}
                 imageSource={listing.imageUrl ? { uri: listing.imageUrl } : undefined}
                 statusLabel={ACTIVE_LISTING_STATUSES.has(listing.status) ? 'Active' : 'Completed'}
-                onPressViewRequests={handleViewListings}
+                onPressViewRequests={() => handleViewRequests(listing)}
                 onEdit={() => handleEditListing(listing)}
                 onInactive={() => handleInactiveListing(listing)}
                 onDelete={() => handleDeleteListing(listing)}

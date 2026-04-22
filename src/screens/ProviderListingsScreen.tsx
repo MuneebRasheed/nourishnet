@@ -5,15 +5,15 @@ import {
   Text,
   View,
   ScrollView,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation, CompositeNavigationProp, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useThemeStore } from '../../store/themeStore';
 import { getColors, palette } from '../../utils/colors';
 import { useAppFontSizes } from '../../theme/fonts';
 import { fontFamilies } from '../../theme/typography';
-import { ListingsStackParamList } from '../navigations/ListingsNavigationStack';
 import { RootStackParamList } from '../navigations/RootNavigation';
 import HomeHeader from '../components/HomeHeader';
 import ContinueButton from '../components/ContinueButton';
@@ -47,6 +47,13 @@ export default function ProviderListingsScreen() {
   const removeListing = useProviderListingsStore((s) => s.removeListing);
   const addListingFromApi = useProviderListingsStore((s) => s.addListingFromApi);
   const [activeTab, setActiveTab] = useState<ActiveCompletedTab>('Active');
+  const [refreshing, setRefreshing] = useState(false);
+  const topRefreshOffset = insets.top + 56;
+
+  const loadProviderListings = useCallback(async () => {
+    const { listings, error } = await fetchProviderListingsWithZeroQuantityResolved();
+    if (!error) setListings(listings);
+  }, [setListings]);
 
   useFocusEffect(
     useCallback(() => {
@@ -60,9 +67,7 @@ export default function ProviderListingsScreen() {
       };
     }, [setListings])
   );
-  type ListingsNav = NativeStackNavigationProp<ListingsStackParamList, 'ProviderListingsScreen'>;
-type RootNav = NativeStackNavigationProp<RootStackParamList, keyof RootStackParamList>;
-const navigation = useNavigation<CompositeNavigationProp<ListingsNav, RootNav>>();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const ACTIVE_LISTING_STATUSES = useMemo(
     () => new Set<ProviderListing['status']>(['active', 'request_open', 'claimed']),
@@ -179,6 +184,24 @@ const navigation = useNavigation<CompositeNavigationProp<ListingsNav, RootNav>>(
           { paddingBottom: insets.bottom + 100 },
         ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={async () => {
+              setRefreshing(true);
+              try {
+                await loadProviderListings();
+              } finally {
+                setRefreshing(false);
+              }
+            }}
+            tintColor={palette.roleBulbColor2}
+            titleColor={palette.roleBulbColor2}
+            colors={[palette.roleBulbColor2]}
+            progressBackgroundColor={isDark ? colors.inputFieldBg : palette.white}
+            progressViewOffset={topRefreshOffset}
+          />
+        }
       >
         <View style={styles.content}>
           <ActiveCompletedTabs

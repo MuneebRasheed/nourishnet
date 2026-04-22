@@ -103,6 +103,13 @@ export async function completeAuthAndGoToMainTabs(
   const profileWithRole = { ...profile, role: resolvedRole };
   setAuth(resolvedRole, profileWithRole);
   await markOnboardingComplete();
-  setTimeout(() => navigation.replace('MainTabs'), 0);
+  setTimeout(
+    () =>
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'MainTabs' }],
+      }),
+    0
+  );
   return { ok: true };
 }

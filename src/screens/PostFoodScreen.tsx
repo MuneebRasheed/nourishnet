@@ -9,6 +9,8 @@ import {
   TouchableOpacity,
   TextInput,
   Image,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
@@ -199,7 +201,10 @@ export default function PostFoodScreen() {
         return;
       }
       await persistListingFromApi(listing);
-      navigation.navigate('MainTabs', { screen: 'Home' });
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'MainTabs', params: { screen: 'Home' } }],
+      });
     } catch {
       Alert.alert('Error', 'Something went wrong. Please try again.');
     } finally {
@@ -324,7 +329,11 @@ export default function PostFoodScreen() {
   const arrowColor = isDark ? colors.textSecondary : colors.text;
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <KeyboardAvoidingView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
+    >
       <View style={{ paddingTop: insets.top }}>
         <SettingsHeader
           title={editListing ? 'Edit Food' : 'Post Food'}
@@ -346,7 +355,7 @@ export default function PostFoodScreen() {
             activeOpacity={0.85}
           >
             {previousRepostLoading ? (
-              <ActivityIndicator color={palette.white} />
+              <ActivityIndicator color={colors.primary} />
             ) : (
               <Text
                 style={[
@@ -367,6 +376,7 @@ export default function PostFoodScreen() {
           { paddingBottom: insets.bottom + 10},
         ]}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         showsVerticalScrollIndicator={false}
       >
         {/* Food Details */}
@@ -587,7 +597,7 @@ export default function PostFoodScreen() {
           style={styles.nextButton}
         />
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

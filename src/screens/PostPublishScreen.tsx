@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   Modal,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -346,7 +347,10 @@ export default function PostPublishScreen() {
         }
         await persistListingInStore(listing);
       }
-      navigation.navigate('MainTabs', { screen: 'Home' });
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'MainTabs', params: { screen: 'Home' } }],
+      });
     } catch {
       Alert.alert('Error', 'Something went wrong. Please try again.');
     } finally {
@@ -355,7 +359,11 @@ export default function PostPublishScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <KeyboardAvoidingView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
+    >
       <View style={{ paddingTop: insets.top }}>
         <SettingsHeader
           title={editListing ? 'Edit Food' : 'Post Food'}
@@ -372,6 +380,7 @@ export default function PostPublishScreen() {
           { paddingBottom: insets.bottom + 100 },
         ]}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         showsVerticalScrollIndicator={false}
       >
         {/* Pickup Details */}
@@ -731,7 +740,7 @@ export default function PostPublishScreen() {
               }}
             />
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

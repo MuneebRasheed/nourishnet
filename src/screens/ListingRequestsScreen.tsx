@@ -1,7 +1,7 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { Alert, StyleSheet, Text, View, ScrollView } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, StyleSheet, Text, View, ScrollView, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useThemeStore } from '../../store/themeStore';
 import { getColors, palette } from '../../utils/colors';
@@ -18,13 +18,13 @@ import ClockICon from '../assets/svgs/ClockICon';
 import LocationPin from '../assets/svgs/LocationPin';
 import { supabase } from '../lib/supabase';
 import { avatarUriWithCacheBust } from '../lib/profile';
-import { generatePickupPinApi, fetchPickupVerifiedRecipientIdsForListing } from '../lib/api/listings';
+import { generatePickupPinApi } from '../lib/api/listings';
 import { PickupPinModal } from '../components/PickupPinModal';
 
 export type { ListingRequestItem };
 
 type RequestTab = 'Request' | 'Available';
-type ListingRequestWithRecipient = ListingRequestItem & { recipientId: string; pickupComplete?: boolean };
+type ListingRequestWithRecipient = ListingRequestItem & { recipientId: string };
 
 function formatTimeAgo(iso: string | null | undefined) {
   if (!iso) return 'just now';
@@ -37,6 +37,13 @@ function formatTimeAgo(iso: string | null | undefined) {
   if (hrs < 24) return `${hrs}h ago`;
   const days = Math.floor(hrs / 24);
   return `${days}d ago`;
+}
+
+function toShortAddress(address: string | null | undefined, maxChars = 20): string {
+  const trimmed = typeof address === 'string' ? address.trim() : '';
+  if (!trimmed) return 'Unknown location';
+  if (trimmed.length <= maxChars) return trimmed;
+  return `${trimmed.slice(0, maxChars).trimEnd()}...`;
 }
 
 export default function ListingRequestsScreen() {
@@ -89,12 +96,17 @@ export default function ListingRequestsScreen() {
     // 2) Optional: fetch profiles for names/avatars
     const profilesById = new Map<
       string,
-      { full_name: string | null; avatar_url: string | null; updated_at: string | null }
+      {
+        full_name: string | null;
+        avatar_url: string | null;
+        updated_at: string | null;
+        address: string | null;
+      }
     >();
     if (recipientIds.length > 0) {
       const { data: profiles, error: profErr } = await supabase
         .from('profiles')
-        .select('id, full_name, avatar_url, updated_at')
+        .select('id, full_name, avatar_url, updated_at, address')
         .in('id', recipientIds);
 
       if (profErr) {
@@ -105,27 +117,19 @@ export default function ListingRequestsScreen() {
             full_name: p.full_name ?? null,
             avatar_url: p.avatar_url ?? null,
             updated_at: p.updated_at ?? null,
+            address: p.address ?? null,
           });
         }
       }
     }
 
-    const { recipientIds: verifiedRecipientIds, error: verifiedErr } =
-      await fetchPickupVerifiedRecipientIdsForListing(listingId);
-    if (verifiedErr) {
-      console.warn('[ListingRequestsScreen] fetch pickup_verified recipients', verifiedErr);
-    }
-    const verifiedRecipients = new Set(verifiedRecipientIds);
-
-    const toItem = (
-      r: { id: string; recipient_id: string; created_at: string | null },
-      forAccepted: boolean
-    ): ListingRequestWithRecipient => {
+    const toItem = (r: { id: string; recipient_id: string; created_at: string | null }): ListingRequestWithRecipient => {
       const profile = profilesById.get(r.recipient_id);
       const displayName =
         (profile?.full_name && profile.full_name.trim().length > 0
           ? profile.full_name.trim()
           : null) ?? 'Recipient';
+      const recipientAddress = toShortAddress(profile?.address);
       const avatarUri = avatarUriWithCacheBust(profile?.avatar_url, profile?.updated_at);
 
       return {
@@ -133,23 +137,20 @@ export default function ListingRequestsScreen() {
         requesterName: displayName,
         avatar: avatarUri ? { uri: avatarUri } : undefined,
         recipientId: r.recipient_id,
-        distance: '—',
+        distance: recipientAddress,
         requestedAt: formatTimeAgo(r.created_at),
         priority: 'medium' as const,
-        pickupComplete: forAccepted && verifiedRecipients.has(r.recipient_id),
       };
     };
 
-    setPendingRequests(rows.filter((r) => r.status === 'pending').map((r) => toItem(r, false)));
-    setAcceptedRequests(rows.filter((r) => r.status === 'won').map((r) => toItem(r, true)));
+    setPendingRequests(rows.filter((r) => r.status === 'pending').map(toItem));
+    setAcceptedRequests(rows.filter((r) => r.status === 'won').map(toItem));
     setIsRefreshing(false);
   }, [listingId]);
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchRequests();
-    }, [fetchRequests])
-  );
+  useEffect(() => {
+    fetchRequests();
+  }, [fetchRequests]);
 
   const handleBack = () => {
     if (navigation.canGoBack()) navigation.goBack();
@@ -281,6 +282,7 @@ export default function ListingRequestsScreen() {
   };
 
   const pendingCount = pendingRequests.length;
+  const topRefreshOffset = insets.top + 56;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.background }]}>
@@ -393,6 +395,17 @@ export default function ListingRequestsScreen() {
               pendingRequests.length === 0 && styles.scrollContentEmpty,
             ]}
             showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={fetchRequests}
+                tintColor={palette.roleBulbColor2}
+                titleColor={palette.roleBulbColor2}
+                colors={[palette.roleBulbColor2]}
+                progressBackgroundColor={isDark ? colors.inputFieldBg : palette.white}
+                progressViewOffset={topRefreshOffset}
+              />
+            }
           >
             {pendingRequests.length === 0 ? (
               <View style={styles.emptyState}>
@@ -447,6 +460,17 @@ export default function ListingRequestsScreen() {
             acceptedRequests.length === 0 && styles.scrollContentEmpty,
           ]}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={fetchRequests}
+              tintColor={palette.roleBulbColor2}
+              titleColor={palette.roleBulbColor2}
+              colors={[palette.roleBulbColor2]}
+              progressBackgroundColor={isDark ? colors.inputFieldBg : palette.white}
+              progressViewOffset={topRefreshOffset}
+            />
+          }
         >
           {acceptedRequests.length === 0 ? (
             <View style={styles.emptyStateCenter}>
@@ -486,7 +510,6 @@ export default function ListingRequestsScreen() {
                 key={req.id}
                 item={req}
                 variant="accepted"
-                pickupComplete={req.pickupComplete}
                 onQRCode={() => handleQRCode(req.id, req.recipientId)}
                 onPinCode={() => handlePinCode(req.id, req.recipientId)}
               />

@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View, TouchableOpacity } from 'react-native'
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform } from 'react-native'
 import React, { useState } from 'react'
 import { useNavigation } from '@react-navigation/native'
 import { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -51,7 +51,17 @@ const ForgotPasswordScreen = () => {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+    <KeyboardAvoidingView
+      style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
+    >
+      <ScrollView
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        showsVerticalScrollIndicator={false}
+      >
       <View style={styles.content}>
         <Text
           style={[
@@ -121,7 +131,8 @@ const ForgotPasswordScreen = () => {
           </Text>
         </TouchableOpacity>
       </View>
-    </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   )
 }
 
@@ -134,6 +145,9 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 16,
     paddingTop: 48,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   title: {
     textAlign: 'center',

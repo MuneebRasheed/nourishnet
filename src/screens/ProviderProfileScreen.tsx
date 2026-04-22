@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react'
-import { StyleSheet, Text, View, ScrollView } from 'react-native'
+import { StyleSheet, Text, View, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useThemeStore } from '../../store/themeStore'
 import { getColors, palette } from '../../utils/colors'
@@ -22,6 +22,7 @@ import { supabase } from '../lib/supabase'
 import { pickImage, uploadAvatar } from '../lib/uploadAvatar'
 import { fetchProfile } from '../lib/profile'
 import { parseStoredPhoneForPhoneInput } from '../lib/phoneProfile'
+import ArrowBACK from '../assets/svgs/ArrowBACK'
 
 const FOOD_CATEGORY_OPTIONS = [
   'Prepared Meals',
@@ -32,6 +33,11 @@ const FOOD_CATEGORY_OPTIONS = [
   'Dairy Products',
   'Packaged Foods',
 ]
+
+const toFlagEmoji = (countryCode: string) =>
+  countryCode
+    .toUpperCase()
+    .replace(/./g, (char) => String.fromCodePoint(127397 + char.charCodeAt(0)))
 
 export default function ProviderProfileScreen() {
   const theme = useThemeStore((s) => s.theme)
@@ -112,6 +118,10 @@ export default function ProviderProfileScreen() {
       setProfileImageUri(result.uri)
       setProfileImageBase64(result.base64)
     }
+  }
+
+  const handleBack = () => {
+    if (navigation.canGoBack()) navigation.goBack()
   }
 
   const handleCompleteProfile = async () => {
@@ -198,11 +208,13 @@ export default function ProviderProfileScreen() {
   }
 
   return (
-    <View
+    <KeyboardAvoidingView
       style={[
         styles.container,
         { backgroundColor: colors.background, paddingTop: insets.top },
       ]}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
     >
       <ScrollView
         contentContainerStyle={[
@@ -210,9 +222,17 @@ export default function ProviderProfileScreen() {
           { paddingBottom: insets.bottom + 24 },
         ]}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.content}>
+          <TouchableOpacity
+            onPress={handleBack}
+            activeOpacity={0.8}
+            style={[styles.backBtn, { backgroundColor: colors.inputFieldBg }]}
+          >
+            <ArrowBACK width={22} height={22} color={colors.text} />
+          </TouchableOpacity>
           <View style={styles.header}>
             <Text
               style={[
@@ -307,6 +327,7 @@ export default function ProviderProfileScreen() {
                 value={phone}
                 onChangeText={setPhone}
                 onChangeFormattedText={(text) => setPhoneFormatted(text)}
+                onChangeCountry={(country) => setPhoneCountryIso(country.cca2 as CountryCode)}
                 withDarkTheme={isDark}
                 containerStyle={[
                   styles.phoneInputContainer,
@@ -320,12 +341,20 @@ export default function ProviderProfileScreen() {
                   styles.phoneTextInput,
                   { color: isDark ? palette.white : colors.text },
                 ]}
-                codeTextStyle={{ color: isDark ? palette.white : colors.text }}
+                codeTextStyle={{
+                  color: isDark ? palette.white : colors.text,
+                  marginRight: 6,
+                }}
                 flagButtonStyle={styles.phoneFlagButton}
                 countryPickerButtonStyle={[
                   styles.phoneFlagButton,
                   { backgroundColor: isDark ? colors.requestBtnBg : colors.inputFieldBg },
                 ]}
+                countryPickerProps={{
+                  renderFlagButton: () => (
+                    <Text style={styles.phoneFlagEmoji}>{toFlagEmoji(phoneCountryIso)}</Text>
+                  ),
+                }}
                 textInputProps={{
                   placeholderTextColor: palette.timerIconColor,
                 }}
@@ -396,7 +425,7 @@ export default function ProviderProfileScreen() {
           </Text>
         </View>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   )
 }
 
@@ -410,6 +439,14 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 16,
     paddingTop: 10,
+  },
+  backBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
   },
   header: {
     alignItems: 'center',
@@ -436,20 +473,35 @@ const styles = StyleSheet.create({
     width: '100%',
     borderRadius: 12,
     minHeight: 50,
+    overflow: 'hidden',
   },
   phoneTextContainer: {
-    borderRadius: 0,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    borderTopRightRadius: 12,
+    borderBottomRightRadius: 12,
+    borderTopLeftRadius: 0,
+    borderBottomLeftRadius: 0,
+    paddingVertical: 0,
+    paddingHorizontal: 8,
   },
   phoneTextInput: {
     fontFamily: fontFamilies.inter,
     fontSize: 16,
-    padding: 0,
+    paddingVertical: 0,
+    margin: 0,
   },
   phoneFlagButton: {
-    borderRadius: 12,
-    minWidth: 80,
+    borderTopLeftRadius: 12,
+    borderBottomLeftRadius: 12,
+    borderTopRightRadius: 0,
+    borderBottomRightRadius: 0,
+    width: 64,
+    paddingHorizontal: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  phoneFlagEmoji: {
+    fontSize: 18,
+    marginRight: 6,
   },
   categoryLabel: {
     marginBottom: 12,

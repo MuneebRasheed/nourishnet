@@ -95,10 +95,14 @@ export default function VerificationCodeScreen({ route }: Props) {
         navigation.replace('CreateNewPasswordScreen', { email, otp });
         return;
       }
+      if (!password) {
+        setError('Session expired. Please start signup again.');
+        return;
+      }
       const res = await fetch(`${API_BASE_URL}/auth/verify-signup-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, otp }),
+        body: JSON.stringify({ email, otp, password }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -141,7 +145,7 @@ export default function VerificationCodeScreen({ route }: Props) {
       const endpoint =
         context === 'forgot-password'
           ? `${API_BASE_URL}/auth/forgot-password`
-          : `${API_BASE_URL}/auth/send-signup-otp`;
+          : `${API_BASE_URL}/auth/resend-signup-otp`;
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

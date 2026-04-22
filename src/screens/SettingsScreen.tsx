@@ -470,7 +470,7 @@ export default function SettingsScreen() {
                 disabled={deactivateLoading}
               >
                 {deactivateLoading ? (
-                  <ActivityIndicator color={palette.white} />
+                  <ActivityIndicator color={colors.primary} />
                 ) : (
                   <Text
                     style={[
