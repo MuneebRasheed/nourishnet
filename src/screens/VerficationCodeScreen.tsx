@@ -127,11 +127,15 @@ export default function VerificationCodeScreen({ route }: Props) {
           }
         }
       }
-      if (role === 'provider') {
-        navigation.replace('ProviderProfileScreen', { email, otp });
-      } else {
-        navigation.replace('EditProfileScreen', { email, otp });
-      }
+      navigation.reset({
+        index: 0,
+        routes: [
+          {
+            name: role === 'provider' ? 'ProviderProfileScreen' : 'EditProfileScreen',
+            params: { email, otp },
+          },
+        ],
+      });
     } finally {
       setLoading(false);
     }

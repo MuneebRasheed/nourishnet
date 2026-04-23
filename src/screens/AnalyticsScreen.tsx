@@ -1,11 +1,18 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { StyleSheet, Text, View, ScrollView, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { useThemeStore } from '../../store/themeStore';
 import { getColors, palette } from '../../utils/colors';
 import { useAppFontSizes } from '../../theme/fonts';
 import { fontFamilies } from '../../theme/typography';
 import { useAuthStore } from '../../store/authStore';
+import type { AuthRole } from '../../store/authStore';
+import {
+  DEFAULT_ANALYTICS_CACHE,
+  useAnalyticsSummaryStore,
+  type AnalyticsSummaryCache,
+} from '../../store/analyticsSummaryStore';
 import SettingsHeader from '../components/SettingsHeader';
 import ImpactCard from '../components/ImpactCard';
 import HeartTab from '../assets/svgs/HeartTab';
@@ -15,83 +22,112 @@ import UpwardArrow from '../assets/svgs/UpwardArrow';
 import ArrowCurve from '../assets/svgs/ArrowCurve';
 import { fetchAnalyticsSummaryApi } from '../lib/api/analytics';
 
-const DEFAULT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const DEFAULT_BAR_DATA = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-const CHART_HEIGHT = 120;
-
-const MILESTONES = [
-  {
-    id: 'first-rescue',
-    title: 'First Rescue',
-    description: 'You claimed your first meal!',
-    timeAgo: '3 days ago',
-  },
-  {
-    id: 'eco-warrior',
-    title: 'Eco Warrior',
-    description: 'Saved 10 kg of CO2!',
-    timeAgo: '1 week ago',
-  },
-];
+const CHART_HEIGHT = 150;
+const CHART_TICK_STEPS = 5;
 
 const MILESTONE_PALETTE = [
   { iconBg: palette.roleCardbg, iconColor: palette.roleBulbColor1 },
   { iconBg: palette.roleCard, iconColor: palette.roleBulbColor2 },
 ];
 
+function formatTimeAgo(iso: string | null): string {
+  if (!iso) return 'Not yet';
+  const diffMs = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(diffMs) || diffMs < 0) return 'Not yet';
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days} day${days > 1 ? 's' : ''} ago`;
+  const weeks = Math.floor(days / 7);
+  return `${weeks} week${weeks > 1 ? 's' : ''} ago`;
+}
+
+function toSnapshotFromApi(summary: Awaited<ReturnType<typeof fetchAnalyticsSummaryApi>>['summary']): AnalyticsSummaryCache {
+  if (!summary) return DEFAULT_ANALYTICS_CACHE;
+  return {
+    meals: summary.meals,
+    poundsRescued: summary.poundsRescued,
+    co2LbsSaved: summary.co2LbsSaved,
+    streakDays: summary.streakDays,
+    monthLabels: summary.monthLabels.length ? summary.monthLabels : DEFAULT_ANALYTICS_CACHE.monthLabels,
+    monthCounts: summary.monthCounts.length ? summary.monthCounts : DEFAULT_ANALYTICS_CACHE.monthCounts,
+    monthRatios: summary.monthRatios.length ? summary.monthRatios : DEFAULT_ANALYTICS_CACHE.monthRatios,
+    firstPickupAgo: formatTimeAgo(summary.firstPickupAt),
+    ecoWarriorAgo: formatTimeAgo(summary.firstEcoWarriorAt),
+  };
+}
+
 export default function AnalyticsScreen() {
   const theme = useThemeStore((s) => s.theme);
   const userRole = useAuthStore((s) => s.userRole);
+  const cachedByRole = useAnalyticsSummaryStore((s) => s.byRole);
+  const setRoleSummaryCache = useAnalyticsSummaryStore((s) => s.setRoleSummary);
   const isDark = theme === 'dark';
   const colors = getColors(isDark);
   const fonts = useAppFontSizes();
   const insets = useSafeAreaInsets();
-  const [meals, setMeals] = useState(0);
-  const [poundsRescued, setPoundsRescued] = useState(0);
-  const [co2LbsSaved, setCo2LbsSaved] = useState(0);
-  const [streakDays, setStreakDays] = useState(0);
-  const [months, setMonths] = useState<string[]>(DEFAULT_MONTHS);
-  const [barData, setBarData] = useState<number[]>(DEFAULT_BAR_DATA);
-  const [firstPickupAgo, setFirstPickupAgo] = useState('Not yet');
-  const [ecoWarriorAgo, setEcoWarriorAgo] = useState('Not yet');
+  const activeRole = (userRole === 'provider' || userRole === 'recipient' ? userRole : null) as AuthRole | null;
+  const initialSnapshot = activeRole ? cachedByRole[activeRole] : DEFAULT_ANALYTICS_CACHE;
+  const [meals, setMeals] = useState(initialSnapshot.meals);
+  const [poundsRescued, setPoundsRescued] = useState(initialSnapshot.poundsRescued);
+  const [co2LbsSaved, setCo2LbsSaved] = useState(initialSnapshot.co2LbsSaved);
+  const [streakDays, setStreakDays] = useState(initialSnapshot.streakDays);
+  const [months, setMonths] = useState<string[]>(initialSnapshot.monthLabels);
+  const [monthCounts, setMonthCounts] = useState<number[]>(
+    initialSnapshot.monthCounts ?? initialSnapshot.monthRatios
+  );
+  const [firstPickupAgo, setFirstPickupAgo] = useState(initialSnapshot.firstPickupAgo);
+  const [ecoWarriorAgo, setEcoWarriorAgo] = useState(initialSnapshot.ecoWarriorAgo);
+
+  const applySnapshot = (snapshot: AnalyticsSummaryCache) => {
+    setMeals(snapshot.meals);
+    setPoundsRescued(snapshot.poundsRescued);
+    setCo2LbsSaved(snapshot.co2LbsSaved);
+    setStreakDays(snapshot.streakDays);
+    setMonths(snapshot.monthLabels);
+    setMonthCounts(snapshot.monthCounts ?? snapshot.monthRatios);
+    setFirstPickupAgo(snapshot.firstPickupAgo);
+    setEcoWarriorAgo(snapshot.ecoWarriorAgo);
+  };
 
   useEffect(() => {
     let cancelled = false;
 
-    const formatTimeAgo = (iso: string | null): string => {
-      if (!iso) return 'Not yet';
-      const diffMs = Date.now() - new Date(iso).getTime();
-      if (!Number.isFinite(diffMs) || diffMs < 0) return 'Not yet';
-      const mins = Math.floor(diffMs / 60000);
-      if (mins < 1) return 'Just now';
-      if (mins < 60) return `${mins}m ago`;
-      const hrs = Math.floor(mins / 60);
-      if (hrs < 24) return `${hrs}h ago`;
-      const days = Math.floor(hrs / 24);
-      if (days < 7) return `${days} day${days > 1 ? 's' : ''} ago`;
-      const weeks = Math.floor(days / 7);
-      return `${weeks} week${weeks > 1 ? 's' : ''} ago`;
-    };
-
     const load = async () => {
-      if (userRole !== 'provider' && userRole !== 'recipient') return;
-      const { summary } = await fetchAnalyticsSummaryApi(userRole);
+      if (!activeRole) return;
+      applySnapshot(cachedByRole[activeRole] ?? DEFAULT_ANALYTICS_CACHE);
+      const { summary } = await fetchAnalyticsSummaryApi(activeRole);
       if (!summary || cancelled) return;
-      setMeals(summary.meals);
-      setPoundsRescued(summary.poundsRescued);
-      setCo2LbsSaved(summary.co2LbsSaved);
-      setStreakDays(summary.streakDays);
-      setMonths(summary.monthLabels.length ? summary.monthLabels : DEFAULT_MONTHS);
-      setBarData(summary.monthRatios.length ? summary.monthRatios : DEFAULT_BAR_DATA);
-      setFirstPickupAgo(formatTimeAgo(summary.firstPickupAt));
-      setEcoWarriorAgo(formatTimeAgo(summary.firstEcoWarriorAt));
+      const snapshot = toSnapshotFromApi(summary);
+      applySnapshot(snapshot);
+      setRoleSummaryCache(activeRole, snapshot);
     };
 
     load();
     return () => {
       cancelled = true;
     };
-  }, [userRole]);
+  }, [activeRole, cachedByRole, setRoleSummaryCache]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!activeRole) return undefined;
+      let cancelled = false;
+      void (async () => {
+        const { summary } = await fetchAnalyticsSummaryApi(activeRole);
+        if (!summary || cancelled) return;
+        const snapshot = toSnapshotFromApi(summary);
+        applySnapshot(snapshot);
+        setRoleSummaryCache(activeRole, snapshot);
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [activeRole, setRoleSummaryCache])
+  );
 
   const statLabels = useMemo(
     () => ({
@@ -106,17 +142,37 @@ export default function AnalyticsScreen() {
       {
         id: 'first-rescue',
         title: 'First Rescue',
-        description: 'You claimed your first meal!',
+        description: userRole === 'provider' ? 'You shared your first meal!' : 'You claimed your first meal!',
         timeAgo: firstPickupAgo,
       },
       {
         id: 'eco-warrior',
         title: 'Eco Warrior',
-        description: 'Saved 10 kg of CO2!',
+        description:
+          userRole === 'provider'
+            ? 'You shared enough meals to save 10 kg of CO2!'
+            : 'You saved 10 kg of CO2!',
         timeAgo: ecoWarriorAgo,
       },
     ],
-    [ecoWarriorAgo, firstPickupAgo]
+    [ecoWarriorAgo, firstPickupAgo, userRole]
+  );
+  const maxMonthlyMeals = useMemo(() => Math.max(0, ...monthCounts), [monthCounts]);
+  const yAxisMax = useMemo(() => Math.max(10, Math.ceil(maxMonthlyMeals / 10) * 10), [maxMonthlyMeals]);
+  const yAxisTicks = useMemo(
+    () =>
+      Array.from({ length: CHART_TICK_STEPS + 1 }, (_, i) => {
+        const ratio = 1 - i / CHART_TICK_STEPS;
+        return {
+          ratio,
+          value: Math.round(yAxisMax * ratio),
+        };
+      }),
+    [yAxisMax]
+  );
+  const hasMonthlyActivity = useMemo(
+    () => monthCounts.length > 0 && monthCounts.some((count) => count > 0),
+    [monthCounts]
   );
 
   const headerTop = Platform.select({
@@ -196,39 +252,94 @@ export default function AnalyticsScreen() {
           >
             Monthly Activity
           </Text>
-          <View style={[styles.chartCard, { backgroundColor:colors.inputFieldBg,  }]}>
-            <View style={styles.barChart}>
-              {barData.map((ratio, i) => (
-                <View key={months[i] ?? `m-${i}`} style={styles.barWrapper}>
-                  <View
-                    style={[
-                      styles.bar,
-                      {
-                        height: Math.max(8, CHART_HEIGHT * ratio),
-                        backgroundColor: '#FF6B35',
-                      },
-                    ]}
-                  />
+          <View style={[styles.chartCard, { backgroundColor: colors.inputFieldBg }]}>
+            {hasMonthlyActivity ? (
+              <View style={styles.chartBody}>
+                <View style={styles.yAxis}>
+                  {yAxisTicks.map((tick) => (
+                    <Text
+                      key={`tick-${tick.value}-${tick.ratio}`}
+                      style={[
+                        styles.yAxisLabel,
+                        {
+                          color: colors.textSecondary,
+                          fontFamily: fontFamilies.inter,
+                          fontSize: fonts.caption,
+                        },
+                      ]}
+                    >
+                      {tick.value}
+                    </Text>
+                  ))}
                 </View>
-              ))}
-            </View>
-            <View style={styles.barLabels}>
-              {months.map((label) => (
+                <View style={styles.chartContent}>
+                  <View style={styles.chartArea}>
+                    <View style={styles.gridLayer} pointerEvents="none">
+                      {yAxisTicks.map((tick, index) => (
+                        <View
+                          key={`grid-${tick.value}-${tick.ratio}`}
+                          style={[
+                            styles.gridLine,
+                            {
+                              top: `${(1 - tick.ratio) * 100}%`,
+                              opacity: index === yAxisTicks.length - 1 ? 0.35 : 0.2,
+                              backgroundColor: colors.borderColor,
+                            },
+                          ]}
+                        />
+                      ))}
+                    </View>
+                    <View style={styles.barChart}>
+                      {monthCounts.map((count, i) => (
+                        <View key={months[i] ?? `m-${i}`} style={styles.barWrapper}>
+                          <View
+                            style={[
+                              styles.bar,
+                              {
+                                height: count > 0 ? Math.max(10, (CHART_HEIGHT * count) / yAxisMax) : 0,
+                                backgroundColor: '#FF6B35',
+                              },
+                            ]}
+                          />
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                  <View style={styles.barLabels}>
+                    {months.map((label) => (
+                      <Text
+                        key={label}
+                        style={[
+                          styles.barLabel,
+                          {
+                            color: colors.textSecondary,
+                            fontFamily: fontFamilies.inter,
+                            fontSize: fonts.caption,
+                          },
+                        ]}
+                      >
+                        {label}
+                      </Text>
+                    ))}
+                  </View>
+                </View>
+              </View>
+            ) : (
+              <View style={styles.noActivityContainer}>
                 <Text
-                  key={label}
                   style={[
-                    styles.barLabel,
+                    styles.noActivityText,
                     {
                       color: colors.textSecondary,
-                      fontFamily: fontFamilies.inter,
-                      fontSize: fonts.caption,
+                      fontFamily: fontFamilies.poppinsSemiBold,
+                      fontSize: fonts.body,
                     },
                   ]}
                 >
-                  {label}
+                  No Monthly Activity
                 </Text>
-              ))}
-            </View>
+              </View>
+            )}
           </View>
         </View>
 
@@ -299,15 +410,59 @@ const styles = StyleSheet.create({
     marginTop:12
   },
   chartCard: {
-    padding: 16,
+    // padding: 16,
+    paddingVertical: 16,
+    paddingRight: 16,
+    paddingLeft: 4,
     borderRadius: 12,
     
+  },
+  noActivityContainer: {
+    height: CHART_HEIGHT,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noActivityText: {
+    textAlign: 'center',
+  },
+  chartBody: {
+    flexDirection: 'row',
+  
+    // alignItems: 'flex-end',
+  },
+  yAxis: {
+    height: CHART_HEIGHT,
+    justifyContent: 'space-between',
+    marginRight: 6,
+    paddingBottom: 2,
+  },
+  yAxisLabel: {
+    minWidth: 20,
+    textAlign: 'right',
+    lineHeight: 14,
+  },
+  chartContent: {
+    flex: 1,
+  },
+  chartArea: {
+    height: CHART_HEIGHT,
+    justifyContent: 'flex-end',
+    position: 'relative',
+  },
+  gridLayer: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  gridLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 1,
   },
   barChart: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
-    height: 120,
+    height: CHART_HEIGHT,
     gap: 8,
   },
   barWrapper: {
@@ -317,8 +472,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   bar: {
-    width: '70%',
-    minHeight: 8,
+    width: '62%',
     borderRadius: 6,
   },
   barLabels: {

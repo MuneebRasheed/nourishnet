@@ -317,6 +317,54 @@ export async function requestClaimApi(listingId: string): Promise<{ request: any
   return { request: data.request ?? null };
 }
 
+export async function providerAcceptRequestApi(
+  requestId: string
+): Promise<{ request: any | null; error?: string }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/listings/requests/${requestId}/accept`, {
+    method: 'POST',
+    headers,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = (data?.error || '').trim();
+    const mapped =
+      msg === 'request_not_found'
+        ? 'Request no longer exists.'
+        : msg === 'not_allowed'
+          ? 'You are not allowed to accept this request.'
+          : msg === 'listing_not_available'
+            ? 'Listing is no longer available.'
+            : msg === 'request_not_pending'
+              ? 'This request is no longer pending.'
+              : msg || 'Failed to accept request';
+    return { request: null, error: mapped };
+  }
+  return { request: data.request ?? null };
+}
+
+export async function providerDeclineRequestApi(
+  requestId: string
+): Promise<{ request: any | null; error?: string }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/listings/requests/${requestId}/decline`, {
+    method: 'POST',
+    headers,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = (data?.error || '').trim();
+    const mapped =
+      msg === 'request_not_found'
+        ? 'Request no longer exists.'
+        : msg === 'not_allowed'
+          ? 'You are not allowed to decline this request.'
+          : msg || 'Failed to decline request';
+    return { request: null, error: mapped };
+  }
+  return { request: data.request ?? null };
+}
+
 export async function generatePickupPinApi(
   listingId: string,
   recipientId?: string
@@ -427,6 +475,7 @@ type MyRequestRow = {
   listing_id: string;
   request_status: string;
   request_created_at: string;
+  provider_name: string | null;
   listing_title: string | null;
   food_type: string | null;
   quantity: string | null;
@@ -452,6 +501,7 @@ export type MyRequestItem = {
   title: string;
   source: string;
   distance: string;
+  pickupAddress?: string;
   postedAgo: string;
   portions: string;
   timeSlot: string;
@@ -507,8 +557,9 @@ function rowToMyRequestItem(row: MyRequestRow): MyRequestItem {
     id: row.listing_id,
     imageUrl: row.image_url ?? null,
     title: row.listing_title ?? '',
-    source: 'Provider',
-    distance: '—',
+    source: row.provider_name?.trim() || 'Provider',
+    distance: row.pickup_address?.trim() || '',
+    pickupAddress: row.pickup_address?.trim() || '',
     postedAgo: formatPostedAgo(row.listing_created_at),
     portions: [row.quantity ?? '', row.quantity_unit ?? 'Portions'].filter(Boolean).join(' ') || '0 Portions',
     timeSlot: [row.start_time, row.end_time].filter(Boolean).join(' - ') || '—',

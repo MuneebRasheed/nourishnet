@@ -21,6 +21,7 @@ import { getDisplayName, getAvatarLetter, avatarUriWithCacheBust } from '../lib/
 import { useThemeStore, useResolvedIsDark } from '../../store/themeStore';
 import { useSettingsStore } from '../../store/settingStore';
 import { useAuthStore, isProviderSession } from '../../store/authStore';
+import { clearUserPersistedStores } from '../../store/clearUserPersistedStores';
 import { fetchProfile } from '../lib/profile';
 import { getColors, palette } from '../../utils/colors';
 import { useAppFontSizes } from '../../theme/fonts';
@@ -56,7 +57,6 @@ export default function SettingsScreen() {
   const userRole = useAuthStore((s) => s.userRole);
   const profile = useAuthStore((s) => s.profile);
   const setAuth = useAuthStore((s) => s.setAuth);
-  const clearAuth = useAuthStore((s) => s.clearAuth);
   const largeFont = useSettingsStore((s) => s.largeFont);
   const setLargeFont = useSettingsStore((s) => s.setLargeFont);
   const isProvider = isProviderSession(userRole, profile);
@@ -104,7 +104,6 @@ export default function SettingsScreen() {
       Alert.alert('Logout failed', message || 'Please try again.');
       return;
     }
-    clearAuth();
     navigation.dispatch(
       CommonActions.reset({
         index: 0,
@@ -174,10 +173,9 @@ export default function SettingsScreen() {
       setShowDeactivateModal(false);
       await supabase.auth.signOut().catch(() => {});
       await AsyncStorage.multiRemove([
-        'nourishnet-auth',
         'nourishnet_onboarding_completed',
       ]).catch(() => {});
-      clearAuth();
+      await clearUserPersistedStores();
       navigation.dispatch(
         CommonActions.reset({
           index: 0,

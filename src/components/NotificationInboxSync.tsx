@@ -18,7 +18,8 @@ export default function NotificationInboxSync() {
     }
 
     const store = useNotificationInboxStore.getState();
-    store.setLoading(true);
+    const hasUsableCache = store.userId === userId && store.items.length > 0;
+    store.setLoading(!hasUsableCache);
     store.setError(null);
 
     let cancelled = false;
@@ -34,6 +35,15 @@ export default function NotificationInboxSync() {
       store.setItems(data ?? [], userId);
       store.setLoading(false);
     })();
+
+    const channelBase = `notifications-inbox-${userId}`;
+    // Use a unique topic per mount to avoid reusing an already-subscribed channel.
+    const channelName = `${channelBase}-${Date.now()}`;
+    for (const existing of supabase.getChannels()) {
+      if (existing.topic.includes(channelBase)) {
+        void supabase.removeChannel(existing);
+      }
+    }
 
     const channel = supabase
       .channel(`notifications-inbox-${userId}`)

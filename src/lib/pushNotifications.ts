@@ -31,10 +31,22 @@ async function getCurrentUserId(): Promise<string | null> {
 }
 
 export async function saveExpoPushTokenToProfile(userId: string, token: string): Promise<void> {
+  const trimmed = token.trim();
+  if (!trimmed) return;
+
+  // Preferred path: atomically reassign token ownership to current user.
+  const { error: rpcError } = await supabase.rpc('set_my_expo_push_token', {
+    p_token: trimmed,
+  });
+  if (!rpcError) return;
+
+  console.warn('[push] set_my_expo_push_token failed; using fallback update', rpcError.message);
+
+  // Fallback for environments where migration/RPC is not available yet.
   const { error } = await supabase
     .from('profiles')
     .update({
-      expo_push_token: token,
+      expo_push_token: trimmed,
       expo_push_token_updated_at: new Date().toISOString(),
     })
     .eq('id', userId);
@@ -44,6 +56,13 @@ export async function saveExpoPushTokenToProfile(userId: string, token: string):
 }
 
 export async function clearExpoPushTokenFromProfile(userId: string): Promise<void> {
+  const currentUserId = await getCurrentUserId();
+  if (currentUserId && currentUserId === userId) {
+    const { error: rpcError } = await supabase.rpc('set_my_expo_push_token', { p_token: null });
+    if (!rpcError) return;
+    console.warn('[push] set_my_expo_push_token clear failed; using fallback update', rpcError.message);
+  }
+
   const { error } = await supabase
     .from('profiles')
     .update({
@@ -102,6 +121,7 @@ export async function registerExpoPushTokenIfNeeded(): Promise<void> {
   const token = tokenRes.data;
   if (!token) return;
 
+  console.log('[push] Obtained Expo token; saving to profile');
   await saveExpoPushTokenToProfile(userId, token);
 }
 

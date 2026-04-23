@@ -18,8 +18,12 @@ import ClockICon from '../assets/svgs/ClockICon';
 import LocationPin from '../assets/svgs/LocationPin';
 import { supabase } from '../lib/supabase';
 import { avatarUriWithCacheBust } from '../lib/profile';
-import { generatePickupPinApi } from '../lib/api/listings';
+import { generatePickupPinApi, providerAcceptRequestApi, providerDeclineRequestApi } from '../lib/api/listings';
 import { PickupPinModal } from '../components/PickupPinModal';
+import {
+  useListingRequestsCacheStore,
+  type CachedListingRequest,
+} from '../../store/listingRequestsCacheStore';
 
 export type { ListingRequestItem };
 
@@ -46,6 +50,39 @@ function toShortAddress(address: string | null | undefined, maxChars = 20): stri
   return `${trimmed.slice(0, maxChars).trimEnd()}...`;
 }
 
+function cachedToScreenRequest(row: CachedListingRequest): ListingRequestWithRecipient {
+  return {
+    id: row.id,
+    requesterName: row.requesterName,
+    avatar: row.avatarUri ? { uri: row.avatarUri } : undefined,
+    distance: row.distance,
+    requestedAt: row.requestedAt,
+    priority: row.priority,
+    recipientId: row.recipientId,
+    pickupComplete: row.pickupComplete,
+  };
+}
+
+function screenToCachedRequest(row: ListingRequestWithRecipient): CachedListingRequest {
+  const avatarUri =
+    row.avatar != null &&
+    typeof row.avatar === 'object' &&
+    'uri' in row.avatar &&
+    typeof row.avatar.uri === 'string'
+      ? row.avatar.uri
+      : undefined;
+  return {
+    id: row.id,
+    requesterName: row.requesterName,
+    avatarUri,
+    distance: row.distance,
+    requestedAt: row.requestedAt,
+    priority: row.priority,
+    recipientId: row.recipientId,
+    pickupComplete: row.pickupComplete,
+  };
+}
+
 export default function ListingRequestsScreen() {
   const theme = useThemeStore((s) => s.theme);
   const isDark = theme === 'dark';
@@ -60,19 +97,29 @@ export default function ListingRequestsScreen() {
     () => (listingId ? listings.find((l) => l.id === listingId) : null),
     [listingId, listings]
   );
+  const requestsCacheByListing = useListingRequestsCacheStore((s) => s.byListingId);
+  const setListingRequestsCache = useListingRequestsCacheStore((s) => s.setListingRequests);
+  const listingCache = listingId ? requestsCacheByListing[listingId] : undefined;
 
   const [activeTab, setActiveTab] = useState<RequestTab>('Request');
-  const [pendingRequests, setPendingRequests] = useState<ListingRequestWithRecipient[]>([]);
-  const [acceptedRequests, setAcceptedRequests] = useState<ListingRequestWithRecipient[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<ListingRequestWithRecipient[]>(
+    () => (listingCache?.pending ?? []).map(cachedToScreenRequest)
+  );
+  const [acceptedRequests, setAcceptedRequests] = useState<ListingRequestWithRecipient[]>(
+    () => (listingCache?.accepted ?? []).map(cachedToScreenRequest)
+  );
+  const [listingRequestsCacheHydrated, setListingRequestsCacheHydrated] = useState(
+    useListingRequestsCacheStore.persist.hasHydrated()
+  );
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [mutatingRequestId, setMutatingRequestId] = useState<string | null>(null);
   const [pinModalVisible, setPinModalVisible] = useState(false);
   const [displayedPin, setDisplayedPin] = useState<string | null>(null);
   const isMutatingRef = useRef(false);
 
-  const fetchRequests = useCallback(async () => {
+  const fetchRequests = useCallback(async (mode: 'background' | 'refresh' = 'background') => {
     if (!listingId) return;
-    setIsRefreshing(true);
+    if (mode === 'refresh') setIsRefreshing(true);
 
     // 1) Fetch requests
     const { data: requests, error: reqErr } = await supabase
@@ -86,7 +133,7 @@ export default function ListingRequestsScreen() {
       console.error('[ListingRequestsScreen] fetch listing_requests', reqErr);
       setPendingRequests([]);
       setAcceptedRequests([]);
-      setIsRefreshing(false);
+      if (mode === 'refresh') setIsRefreshing(false);
       return;
     }
 
@@ -156,14 +203,36 @@ export default function ListingRequestsScreen() {
       };
     };
 
-    setPendingRequests(rows.filter((r) => r.status === 'pending').map(toItem));
-    setAcceptedRequests(rows.filter((r) => r.status === 'won').map(toItem));
-    setIsRefreshing(false);
-  }, [listingId]);
+    const nextPending = rows.filter((r) => r.status === 'pending').map(toItem);
+    const nextAccepted = rows.filter((r) => r.status === 'won').map(toItem);
+    setPendingRequests(nextPending);
+    setAcceptedRequests(nextAccepted);
+    setListingRequestsCache(
+      listingId,
+      nextPending.map(screenToCachedRequest),
+      nextAccepted.map(screenToCachedRequest)
+    );
+    if (mode === 'refresh') setIsRefreshing(false);
+  }, [listingId, setListingRequestsCache]);
 
   useEffect(() => {
-    fetchRequests();
-  }, [fetchRequests]);
+    if (listingRequestsCacheHydrated) return;
+    const unsub = useListingRequestsCacheStore.persist.onFinishHydration(() => {
+      setListingRequestsCacheHydrated(true);
+    });
+    return unsub;
+  }, [listingRequestsCacheHydrated]);
+
+  useEffect(() => {
+    if (!listingCache) return;
+    setPendingRequests((listingCache.pending ?? []).map(cachedToScreenRequest));
+    setAcceptedRequests((listingCache.accepted ?? []).map(cachedToScreenRequest));
+  }, [listingCache]);
+
+  useEffect(() => {
+    if (!listingRequestsCacheHydrated || !listingId) return;
+    void fetchRequests('background');
+  }, [listingRequestsCacheHydrated, listingId, fetchRequests]);
 
   useEffect(() => {
     if (!listingId) return;
@@ -198,9 +267,10 @@ export default function ListingRequestsScreen() {
       isMutatingRef.current = true;
       setMutatingRequestId(requestId);
       try {
-        const { error } = await supabase.rpc('provider_accept_request', { p_request_id: requestId });
+        const { error } = await providerAcceptRequestApi(requestId);
         if (error) {
-          console.error('[ListingRequestsScreen] provider_accept_request', error);
+          console.error('[ListingRequestsScreen] providerAcceptRequestApi', error);
+          Alert.alert('Unable to accept request', error);
           return;
         }
         await fetchRequests();
@@ -218,9 +288,10 @@ export default function ListingRequestsScreen() {
       isMutatingRef.current = true;
       setMutatingRequestId(requestId);
       try {
-        const { error } = await supabase.rpc('provider_decline_request', { p_request_id: requestId });
+        const { error } = await providerDeclineRequestApi(requestId);
         if (error) {
-          console.error('[ListingRequestsScreen] provider_decline_request', error);
+          console.error('[ListingRequestsScreen] providerDeclineRequestApi', error);
+          Alert.alert('Unable to decline request', error);
           return;
         }
         await fetchRequests();
@@ -236,9 +307,9 @@ export default function ListingRequestsScreen() {
     async (requestId: string, recipientId: string): Promise<boolean> => {
       if (!listingId || !requestId || !recipientId) return false;
 
-      const { error: acceptError } = await supabase.rpc('provider_accept_request', { p_request_id: requestId });
-      if (acceptError && acceptError.message !== 'listing_not_available') {
-        console.error('[ListingRequestsScreen] ensure accepted via provider_accept_request', acceptError);
+      const { error: acceptError } = await providerAcceptRequestApi(requestId);
+      if (acceptError && acceptError !== 'Listing is no longer available.') {
+        console.error('[ListingRequestsScreen] ensure accepted via providerAcceptRequestApi', acceptError);
       }
 
       const { data: reqRow, error: reqError } = await supabase
@@ -397,11 +468,11 @@ export default function ListingRequestsScreen() {
             refreshControl={
               <RefreshControl
                 refreshing={isRefreshing}
-                onRefresh={fetchRequests}
-                tintColor={palette.roleBulbColor2}
-                titleColor={palette.roleBulbColor2}
-                colors={[palette.roleBulbColor2]}
-                progressBackgroundColor={isDark ? colors.inputFieldBg : palette.white}
+                onRefresh={() => fetchRequests('refresh')}
+                tintColor={palette.roleBulbColor4}
+                titleColor={palette.roleBulbColor4}
+                colors={[palette.roleBulbColor4]}
+                progressBackgroundColor={colors.surface}
                 progressViewOffset={topRefreshOffset}
               />
             }
@@ -462,11 +533,11 @@ export default function ListingRequestsScreen() {
           refreshControl={
             <RefreshControl
               refreshing={isRefreshing}
-              onRefresh={fetchRequests}
-              tintColor={palette.roleBulbColor2}
-              titleColor={palette.roleBulbColor2}
-              colors={[palette.roleBulbColor2]}
-              progressBackgroundColor={isDark ? colors.inputFieldBg : palette.white}
+              onRefresh={() => fetchRequests('refresh')}
+              tintColor={palette.roleBulbColor4}
+              titleColor={palette.roleBulbColor4}
+              colors={[palette.roleBulbColor4]}
+              progressBackgroundColor={colors.surface}
               progressViewOffset={topRefreshOffset}
             />
           }

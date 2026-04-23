@@ -4,6 +4,7 @@ export type InAppNotificationType =
   | 'request_accepted'
   | 'new_food_available'
   | 'request_not_available'
+  | 'request_not_submitted'
   | 'pickup_reminder';
 
 export type InAppNotificationRow = {

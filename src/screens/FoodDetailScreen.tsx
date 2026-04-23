@@ -9,6 +9,8 @@ import {
   Image,
   TouchableOpacity,
   ImageSourcePropType,
+  Linking,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, useFocusEffect, RouteProp } from '@react-navigation/native';
@@ -163,6 +165,7 @@ function FoodDetailScreen() {
   const locationSecondary = item.pickupAddress ? item.distance : undefined;
   const timePrimary = item.timeSlot;
   const timeSecondary = item.pickupTimeNote;
+  const destinationAddress = (item.pickupAddress || item.distance || '').trim();
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -353,8 +356,41 @@ function FoodDetailScreen() {
 
 
           <NavigateShareBar
-            onNavigate={() => {
-              // TODO: open maps / navigate to pickup address
+            onNavigate={async () => {
+              if (!destinationAddress) {
+                Alert.alert('Location unavailable', 'Pickup location is not available for this listing.');
+                return;
+              }
+              const encodedDestination = encodeURIComponent(destinationAddress);
+
+              try {
+                if (Platform.OS === 'ios') {
+                  // Apple Maps: preferred native maps app on iPhone.
+                  const appleMapsUrl = `http://maps.apple.com/?daddr=${encodedDestination}&dirflg=d`;
+                  const supported = await Linking.canOpenURL(appleMapsUrl);
+                  if (supported) {
+                    await Linking.openURL(appleMapsUrl);
+                    return;
+                  }
+                } else {
+                  // Google Maps app on Android.
+                  const googleNavigationUrl = `google.navigation:q=${encodedDestination}&mode=d`;
+                  const supported = await Linking.canOpenURL(googleNavigationUrl);
+                  if (supported) {
+                    await Linking.openURL(googleNavigationUrl);
+                    return;
+                  }
+                }
+
+                // Fallback if native deep link is unavailable.
+                const webMapsUrl =
+                  Platform.OS === 'ios'
+                    ? `https://maps.apple.com/?daddr=${encodedDestination}`
+                    : `https://www.google.com/maps/dir/?api=1&destination=${encodedDestination}&travelmode=driving`;
+                await Linking.openURL(webMapsUrl);
+              } catch {
+                Alert.alert('Unable to open maps', 'Please try again in a moment.');
+              }
             }}
             onShare={() => {
               // TODO: share food item

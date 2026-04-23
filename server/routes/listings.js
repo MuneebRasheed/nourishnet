@@ -10,6 +10,7 @@ const router = Router();
 const supabaseUrl = process.env.SUPABASE_URL ?? '';
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY ?? '';
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
 const send = (res, body, status) => res.status(status).json(body);
 
@@ -26,6 +27,72 @@ function getSupabaseWithAuth(authHeader) {
 function getSupabaseService() {
   if (!supabaseUrl || !supabaseServiceRoleKey) return null;
   return createClient(supabaseUrl, supabaseServiceRoleKey);
+}
+
+async function sendExpoPushToToken(token, title, body, data = {}) {
+  if (!token || typeof token !== 'string' || !token.trim()) return;
+  const message = {
+    to: token.trim(),
+    sound: 'default',
+    title,
+    body,
+    data,
+  };
+  try {
+    const res = await fetch(EXPO_PUSH_URL, {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify([message]),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.warn('[listings request decision push] Expo push HTTP', res.status, json);
+    }
+  } catch (e) {
+    console.warn('[listings request decision push] Expo push failed', e?.message ?? e);
+  }
+}
+
+async function notifyRequestNotSubmitted(service, recipientId, listingId) {
+  if (!service || !recipientId || !listingId) return;
+  const [{ data: recipientProfile }, { data: listing }] = await Promise.all([
+    service
+      .from('profiles')
+      .select('expo_push_token')
+      .eq('id', recipientId)
+      .maybeSingle(),
+    service
+      .from('listings')
+      .select('title')
+      .eq('id', listingId)
+      .maybeSingle(),
+  ]);
+
+  const foodTitle =
+    typeof listing?.title === 'string' && listing.title.trim()
+      ? listing.title.trim()
+      : 'this listing';
+  const message = `Your request for ${foodTitle} was not submitted because this listing is already full.`;
+
+  const { error: insertError } = await service.from('notifications').insert({
+    user_id: recipientId,
+    type: 'request_not_submitted',
+    data: {
+      listingId,
+      foodTitle,
+      message,
+    },
+  });
+  if (insertError) {
+    console.warn('[listings request full notification] insert', insertError.message);
+  }
+
+  await sendExpoPushToToken(
+    recipientProfile?.expo_push_token ?? null,
+    'Request not submitted',
+    message,
+    { type: 'request_not_submitted', listingId }
+  );
 }
 
 /** True if client sent either camelCase or snake_case gap field (own property). */
@@ -174,11 +241,138 @@ router.post('/:id/request', async (req, res) => {
     const { data, error } = await supabase.rpc('request_claim', { p_listing_id: listingId });
     if (error) {
       console.error('[listings POST /:id/request]', error);
+      const errMsg = String(error.message ?? '');
+      if (errMsg.includes('requests_fully_booked')) {
+        const service = getSupabaseService();
+        if (service) {
+          setImmediate(() => {
+            notifyRequestNotSubmitted(service, user.id, listingId).catch((e) =>
+              console.warn('[listings POST /:id/request] notifyRequestNotSubmitted', e?.message ?? e)
+            );
+          });
+        }
+      }
       return send(res, { error: error.message ?? 'Failed to request claim' }, 400);
     }
     return send(res, { request: data }, 200);
   } catch (e) {
     console.error('[listings POST /:id/request]', e);
+    return send(res, { error: 'Something went wrong' }, 500);
+  }
+});
+
+// ---------- Provider accepts recipient request (POST /listings/requests/:requestId/accept) ----------
+router.post('/requests/:requestId/accept', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const supabase = getSupabaseWithAuth(authHeader);
+    if (!supabase) {
+      return send(res, { error: 'Server auth is not configured or missing Authorization header' }, 401);
+    }
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user?.id) {
+      console.warn('[listings POST /requests/:requestId/accept] auth.getUser failed', userError);
+      return send(res, { error: userError?.message ?? 'Invalid token or user not found' }, 401);
+    }
+
+    const requestId = req.params.requestId;
+    if (!requestId) {
+      return send(res, { error: 'Request id is required' }, 400);
+    }
+
+    const { data: requestRow, error } = await supabase.rpc('provider_accept_request', { p_request_id: requestId });
+    if (error) {
+      console.error('[listings POST /requests/:requestId/accept]', error);
+      return send(res, { error: error.message ?? 'Failed to accept request' }, 400);
+    }
+
+    const service = getSupabaseService();
+    if (service && requestRow?.recipient_id && requestRow?.listing_id) {
+      setImmediate(async () => {
+        const { data: recipientProfile } = await service
+          .from('profiles')
+          .select('expo_push_token')
+          .eq('id', requestRow.recipient_id)
+          .maybeSingle();
+        const { data: listing } = await service
+          .from('listings')
+          .select('title')
+          .eq('id', requestRow.listing_id)
+          .maybeSingle();
+        const foodTitle =
+          typeof listing?.title === 'string' && listing.title.trim()
+            ? listing.title.trim()
+            : 'your requested listing';
+        await sendExpoPushToToken(
+          recipientProfile?.expo_push_token ?? null,
+          'Request accepted',
+          `Your request for ${foodTitle} was accepted.`,
+          { type: 'request_accepted', listingId: requestRow.listing_id }
+        );
+      });
+    }
+
+    return send(res, { request: requestRow }, 200);
+  } catch (e) {
+    console.error('[listings POST /requests/:requestId/accept]', e);
+    return send(res, { error: 'Something went wrong' }, 500);
+  }
+});
+
+// ---------- Provider declines recipient request (POST /listings/requests/:requestId/decline) ----------
+router.post('/requests/:requestId/decline', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const supabase = getSupabaseWithAuth(authHeader);
+    if (!supabase) {
+      return send(res, { error: 'Server auth is not configured or missing Authorization header' }, 401);
+    }
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user?.id) {
+      console.warn('[listings POST /requests/:requestId/decline] auth.getUser failed', userError);
+      return send(res, { error: userError?.message ?? 'Invalid token or user not found' }, 401);
+    }
+
+    const requestId = req.params.requestId;
+    if (!requestId) {
+      return send(res, { error: 'Request id is required' }, 400);
+    }
+
+    const { data: requestRow, error } = await supabase.rpc('provider_decline_request', { p_request_id: requestId });
+    if (error) {
+      console.error('[listings POST /requests/:requestId/decline]', error);
+      return send(res, { error: error.message ?? 'Failed to decline request' }, 400);
+    }
+
+    const service = getSupabaseService();
+    if (service && requestRow?.recipient_id && requestRow?.listing_id) {
+      setImmediate(async () => {
+        const { data: recipientProfile } = await service
+          .from('profiles')
+          .select('expo_push_token')
+          .eq('id', requestRow.recipient_id)
+          .maybeSingle();
+        const { data: listing } = await service
+          .from('listings')
+          .select('title')
+          .eq('id', requestRow.listing_id)
+          .maybeSingle();
+        const foodTitle =
+          typeof listing?.title === 'string' && listing.title.trim()
+            ? listing.title.trim()
+            : 'your requested listing';
+        await sendExpoPushToToken(
+          recipientProfile?.expo_push_token ?? null,
+          'Request update',
+          `Your request for ${foodTitle} was declined.`,
+          { type: 'request_not_available', listingId: requestRow.listing_id }
+        );
+      });
+    }
+
+    return send(res, { request: requestRow }, 200);
+  } catch (e) {
+    console.error('[listings POST /requests/:requestId/decline]', e);
     return send(res, { error: 'Something went wrong' }, 500);
   }
 });
@@ -436,7 +630,7 @@ router.get('/my-requests', async (req, res) => {
     const { data: listings, error: listErr } = await service
       .from('listings')
       .select(
-        'id, title, food_type, quantity, quantity_unit, dietary_tags, allergens, pickup_address, start_time, end_time, note, image_url, status, created_at'
+        'id, provider_id, title, food_type, quantity, quantity_unit, dietary_tags, allergens, pickup_address, start_time, end_time, note, image_url, status, created_at'
       )
       .in('id', listingIds);
 
@@ -446,6 +640,28 @@ router.get('/my-requests', async (req, res) => {
     }
 
     const byId = new Map((listings ?? []).map((l) => [l.id, l]));
+    const providerIds = [
+      ...new Set(
+        (listings ?? [])
+          .map((l) => l.provider_id)
+          .filter((id) => typeof id === 'string' && id.length > 0)
+      ),
+    ];
+    let providerNameById = new Map();
+    if (providerIds.length > 0) {
+      const { data: providerProfiles, error: providerProfilesErr } = await service
+        .from('profiles')
+        .select('id, full_name, business_name, email')
+        .in('id', providerIds);
+      if (!providerProfilesErr && Array.isArray(providerProfiles)) {
+        providerNameById = new Map(
+          providerProfiles.map((p) => [
+            p.id,
+            p.business_name || p.full_name || p.email || 'Provider',
+          ])
+        );
+      }
+    }
 
     const requests = rows
       .map((r) => {
@@ -456,6 +672,7 @@ router.get('/my-requests', async (req, res) => {
           listing_id: r.listing_id,
           request_status: r.status,
           request_created_at: r.created_at,
+          provider_name: providerNameById.get(l.provider_id) || 'Provider',
           listing_title: l.title,
           food_type: l.food_type,
           quantity: l.quantity,

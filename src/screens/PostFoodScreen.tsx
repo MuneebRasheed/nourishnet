@@ -354,18 +354,18 @@ export default function PostFoodScreen() {
             disabled={previousRepostLoading}
             activeOpacity={0.85}
           >
-            {previousRepostLoading ? (
-              <ActivityIndicator color={colors.primary} />
-            ) : (
+            <View style={styles.repostOneTapContent}>
+              {previousRepostLoading ? <ActivityIndicator color={palette.white} /> : null}
               <Text
                 style={[
                   styles.repostOneTapText,
+                  previousRepostLoading ? styles.repostOneTapTextLoading : null,
                   { fontFamily: fontFamilies.interSemiBold, fontSize: fonts.subhead },
                 ]}
               >
                 Re-post from previous (one tap)
               </Text>
-            )}
+            </View>
           </TouchableOpacity>
         </View>
       )}
@@ -620,6 +620,14 @@ const styles = StyleSheet.create({
   repostOneTapText: {
     color: palette.white,
     textAlign: 'center',
+  },
+  repostOneTapTextLoading: {
+    marginLeft: 8,
+  },
+  repostOneTapContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   scroll: {
     flex: 1,

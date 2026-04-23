@@ -24,7 +24,17 @@ import ArrowDown from '../assets/svgs/ArrowDown';
 import ClockICon from '../assets/svgs/ClockICon';
 import LocationPin from '../assets/svgs/LocationPin';
 
-const ALLERGEN_OPTIONS = ['Gluten', 'Eggs', 'Nuts', ];
+const ALLERGEN_OPTIONS = [
+  'Gluten',
+  'Dairy',
+  'Eggs',
+  'Nuts',
+  'Peanuts',
+  'Shellfish',
+  'Fish',
+  'Sesame',
+  'Soy',
+];
 
 const FOOD_TYPE_OPTIONS = ['Prepared Meals', 'Baked Goods', 'Produce', 'Dairy', 'Pantry'];
 
@@ -63,8 +73,8 @@ export type FilterState = {
 
 export const defaultFilterState: FilterState = {
   foodType: '',
-  pickupTimeStart: '03:30PM',
-  pickupTimeEnd: '03:30PM',
+  pickupTimeStart: '',
+  pickupTimeEnd: '',
   allergens: [],
   city: '',
 };

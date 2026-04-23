@@ -198,7 +198,10 @@ export default function ProviderProfileScreen() {
       if (isSettings) {
         navigation.goBack()
       } else {
-        navigation.replace('MainTabs')
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'MainTabs' }],
+        })
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.')

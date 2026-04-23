@@ -57,16 +57,19 @@ export default function NotificationSettingsScreen() {
             label="Push notifications"
             showChevron={false}
             isLast={true}
+            backgroundColor={colors.inputFieldBg}
+            iconBg={isDark ? `${palette.white}1A` : palette.editProfileIconBg}
+            labelColor={colors.text}
             rightElement={
               <CustomSwitch
                 value={notificationsEnabled}
                 onValueChange={setNotificationsEnabled}
                 trackColor={{
-                  false: isDark ? palette.white : palette.settingsIconBg,
-                  true: colors.primary,
+                  false: isDark ? '#4B5563' : '#E5E7EB',
+                  true: '#5FB57F',
                 }}
-                thumbColor={palette.largeFontbutton}
-                trackBorderColor={colors.borderColor}
+                thumbColor={notificationsEnabled ? palette.white : isDark ? '#E5E7EB' : '#FFFFFF'}
+                trackBorderColor={notificationsEnabled ? 'transparent' : isDark ? '#6B7280' : '#D1D5DB'}
               />
             }
           />

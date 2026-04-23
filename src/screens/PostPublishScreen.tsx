@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Alert,
   StyleSheet,
@@ -7,6 +7,9 @@ import {
   ScrollView,
   TextInput,
   TouchableOpacity,
+  Pressable,
+  ActivityIndicator,
+  Keyboard,
   Modal,
   Platform,
   KeyboardAvoidingView,
@@ -42,6 +45,11 @@ import {
 } from '../lib/api/listings';
 import { supabase } from '../lib/supabase';
 import { uploadListingImage } from '../lib/uploadListingImage';
+import {
+  fetchPlacePredictions,
+  isGoogleMapsConfigured,
+  type PlacePrediction,
+} from '../lib/googleMaps';
 
 function formatTimeForDisplay(date: Date): string {
   return date.toLocaleTimeString('en-US', {
@@ -128,6 +136,10 @@ export default function PostPublishScreen() {
   const [showEndPicker, setShowEndPicker] = useState(false);
   const [note, setNote] = useState(editListing?.note ?? repostSourceListing?.note ?? '');
   const [confirmations, setConfirmations] = useState<boolean[]>([false, false, false, false]);
+  const [addressPredictions, setAddressPredictions] = useState<PlacePrediction[]>([]);
+  const [loadingAddressSuggestions, setLoadingAddressSuggestions] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipNextAddressFetchRef = useRef(false);
 
   const [gapStaggerEnabled, setGapStaggerEnabled] = useState(false);
   const [gapAmount, setGapAmount] = useState('2');
@@ -172,6 +184,39 @@ export default function PostPublishScreen() {
     }
     setShowGapUnitDropdown(false);
   }, [editListing, repostSourceListing, profile?.business_address]);
+
+  useEffect(() => {
+    if (!isGoogleMapsConfigured()) return;
+    if (skipNextAddressFetchRef.current) {
+      skipNextAddressFetchRef.current = false;
+      return;
+    }
+    const q = pickupAddress.trim();
+    if (q.length < 2) {
+      setAddressPredictions([]);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      return;
+    }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      setLoadingAddressSuggestions(true);
+      try {
+        const list = await fetchPlacePredictions(q);
+        setAddressPredictions(list.slice(0, 6));
+      } finally {
+        setLoadingAddressSuggestions(false);
+      }
+    }, 350);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [pickupAddress]);
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
 
   const openStartTimePicker = () => {
     if (pickupStart === null) setPickupStart(getDefaultStart());
@@ -358,6 +403,14 @@ export default function PostPublishScreen() {
     }
   };
 
+  const handleSelectAddressPrediction = (prediction: PlacePrediction) => {
+    Keyboard.dismiss();
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    skipNextAddressFetchRef.current = true;
+    setAddressPredictions([]);
+    setPickupAddress(prediction.description);
+  };
+
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: colors.background }]}
@@ -405,12 +458,70 @@ export default function PostPublishScreen() {
           <AuthInput
             type="text"
             label="Pickup Address*"
-            placeholder="Enter pickup address"
+            placeholder={
+              isGoogleMapsConfigured() ? 'Search pickup address' : 'Enter pickup address'
+            }
             value={pickupAddress}
-            onChangeText={setPickupAddress}
+            onChangeText={(value) => {
+              setPickupAddress(value);
+            }}
             leftIcon={<LocationPin width={20} height={20} color={colors.text} />}
             containerStyle={styles.authInputContainer}
           />
+          {loadingAddressSuggestions ? (
+            <View style={styles.addressLoadingRow}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text
+                style={[
+                  styles.addressLoadingText,
+                  {
+                    color: colors.textSecondary,
+                    fontFamily: fontFamilies.inter,
+                    fontSize: fonts.caption,
+                  },
+                ]}
+              >
+                Looking up addresses...
+              </Text>
+            </View>
+          ) : null}
+          {addressPredictions.length > 0 ? (
+            <View
+              style={[
+                styles.addressSuggestions,
+                {
+                  backgroundColor: colors.inputFieldBg,
+                  borderColor: colors.borderColor,
+                },
+              ]}
+            >
+              {addressPredictions.map((prediction) => (
+                <Pressable
+                  key={prediction.place_id}
+                  onPress={() => handleSelectAddressPrediction(prediction)}
+                  style={({ pressed }) => [
+                    styles.addressSuggestionRow,
+                    { opacity: pressed ? 0.85 : 1 },
+                  ]}
+                >
+                  <LocationPin width={16} height={16} color={colors.textSecondary} />
+                  <Text
+                    style={[
+                      styles.addressSuggestionText,
+                      {
+                        color: colors.text,
+                        fontFamily: fontFamilies.inter,
+                        fontSize: fonts.caption,
+                      },
+                    ]}
+                    numberOfLines={2}
+                  >
+                    {prediction.description}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.fieldGroup}>
@@ -770,6 +881,29 @@ const styles = StyleSheet.create({
   },
   authInputContainer: {
     marginBottom: 0,
+  },
+  addressLoadingRow: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  addressLoadingText: {},
+  addressSuggestions: {
+    marginTop: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  addressSuggestionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+  addressSuggestionText: {
+    flex: 1,
   },
   noteInput: {
     paddingVertical: 14,

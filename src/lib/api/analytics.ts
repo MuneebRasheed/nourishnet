@@ -8,6 +8,7 @@ export type AnalyticsSummary = {
   co2LbsSaved: number;
   streakDays: number;
   monthLabels: string[];
+  monthCounts: number[];
   monthRatios: number[];
   firstPickupAt: string | null;
   firstEcoWarriorAt: string | null;
@@ -99,9 +100,9 @@ export async function fetchAnalyticsSummaryApi(role: ImpactRole): Promise<{
     monthCount.set(k, (monthCount.get(k) ?? 0) + Math.max(1, e.meals_rescued ?? 1));
   }
 
-  const raw = months.map((m) => monthCount.get(m.key) ?? 0);
-  const max = Math.max(0, ...raw);
-  const monthRatios = raw.map((v) => (max > 0 ? v / max : 0));
+  const monthCounts = months.map((m) => monthCount.get(m.key) ?? 0);
+  const max = Math.max(0, ...monthCounts);
+  const monthRatios = monthCounts.map((v) => (max > 0 ? v / max : 0));
 
   const firstPickupAt = events.length > 0 ? events[0].created_at : null;
   const firstEcoWarriorAt =
@@ -120,6 +121,7 @@ export async function fetchAnalyticsSummaryApi(role: ImpactRole): Promise<{
       co2LbsSaved,
       streakDays,
       monthLabels: months.map((m) => m.label),
+      monthCounts,
       monthRatios,
       firstPickupAt,
       firstEcoWarriorAt,

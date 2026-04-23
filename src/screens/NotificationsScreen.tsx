@@ -55,6 +55,10 @@ function buildDescription(row: InAppNotificationRow): string {
       return typeof d.message === 'string'
         ? d.message
         : 'This listing is no longer available. Browse other food nearby.';
+    case 'request_not_submitted':
+      return typeof d.message === 'string'
+        ? d.message
+        : 'Your request was not submitted because this listing is currently full.';
     default:
       return '';
   }
@@ -157,6 +161,11 @@ export default function NotificationsScreen() {
           title = 'Request Not Available';
           titleSuffix = undefined;
           break;
+        case 'request_not_submitted':
+          icon = <CrossIcon width={20} height={20} color={palette.logoutColor} />;
+          title = 'Request Not Submitted';
+          titleSuffix = undefined;
+          break;
         default:
           icon = <LocationPin width={20} height={20} color={palette.timeIcon} />;
           title = 'Notification';
@@ -231,10 +240,10 @@ export default function NotificationsScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor={palette.roleBulbColor2}
-              titleColor={palette.roleBulbColor2}
-              colors={[palette.roleBulbColor2]}
-              progressBackgroundColor={isDark ? colors.inputFieldBg : palette.white}
+              tintColor={palette.roleBulbColor4}
+              titleColor={palette.roleBulbColor4}
+              colors={[palette.roleBulbColor4]}
+              progressBackgroundColor={colors.surface}
             />
           }
         >

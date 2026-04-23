@@ -62,6 +62,8 @@ export default function FoodCard({
   const colors = getColors(isDark);
   const fonts = useAppFontSizes();
 
+  const sourceMeta = [item.source, item.distance].filter((v) => String(v ?? '').trim().length > 0).join(' • ');
+
   return (
     <View style={[styles.card, { backgroundColor: colors.inputFieldBg, borderColor: colors.border }]}>
       <View style={styles.imageWrap}>
@@ -99,7 +101,7 @@ export default function FoodCard({
               { color: colors.textSecondary, fontFamily: fontFamilies.inter, fontSize: fonts.caption },
             ]}
           >
-            {item.source} • {item.distance}
+            {sourceMeta}
           </Text>
          
         </View>

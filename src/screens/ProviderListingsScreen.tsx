@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import {
   Alert,
   StyleSheet,
@@ -8,7 +8,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useThemeStore } from '../../store/themeStore';
 import { getColors, palette } from '../../utils/colors';
@@ -46,26 +46,39 @@ export default function ProviderListingsScreen() {
   const setListings = useProviderListingsStore((s) => s.setListings);
   const removeListing = useProviderListingsStore((s) => s.removeListing);
   const addListingFromApi = useProviderListingsStore((s) => s.addListingFromApi);
+  const [providerListingsHydrated, setProviderListingsHydrated] = useState(
+    useProviderListingsStore.persist.hasHydrated()
+  );
   const [activeTab, setActiveTab] = useState<ActiveCompletedTab>('Active');
   const [refreshing, setRefreshing] = useState(false);
-  const topRefreshOffset = insets.top + 56;
 
   const loadProviderListings = useCallback(async () => {
     const { listings, error } = await fetchProviderListingsWithZeroQuantityResolved();
     if (!error) setListings(listings);
   }, [setListings]);
 
+  useEffect(() => {
+    if (providerListingsHydrated) return;
+    const unsub = useProviderListingsStore.persist.onFinishHydration(() => {
+      setProviderListingsHydrated(true);
+    });
+    return unsub;
+  }, [providerListingsHydrated]);
+
+  useEffect(() => {
+    // Keep first paint instant from persisted cache; only fetch if cache is empty.
+    if (!providerListingsHydrated) return;
+    if (allListings.length > 0) return;
+    void loadProviderListings();
+  }, [providerListingsHydrated, allListings.length, loadProviderListings]);
+
   useFocusEffect(
     useCallback(() => {
-      let cancelled = false;
-      (async () => {
-        const { listings, error } = await fetchProviderListingsWithZeroQuantityResolved();
-        if (!cancelled && !error) setListings(listings);
-      })();
-      return () => {
-        cancelled = true;
-      };
-    }, [setListings])
+      if (!providerListingsHydrated) return undefined;
+      // Silent refresh on revisit so users see instant cached data first.
+      void loadProviderListings();
+      return undefined;
+    }, [providerListingsHydrated, loadProviderListings])
   );
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
@@ -176,40 +189,40 @@ export default function ProviderListingsScreen() {
         showBorder={true}
         onRightPress={() => {}}
       />
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[
-          styles.scrollContent,
-          listings.length === 0 && styles.scrollContentEmpty,
-          { paddingBottom: insets.bottom + 100 },
-        ]}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={async () => {
-              setRefreshing(true);
-              try {
-                await loadProviderListings();
-              } finally {
-                setRefreshing(false);
-              }
-            }}
-            tintColor={palette.roleBulbColor2}
-            titleColor={palette.roleBulbColor2}
-            colors={[palette.roleBulbColor2]}
-            progressBackgroundColor={isDark ? colors.inputFieldBg : palette.white}
-            progressViewOffset={topRefreshOffset}
-          />
-        }
-      >
-        <View style={styles.content}>
-          <ActiveCompletedTabs
-            value={activeTab}
-            onChange={setActiveTab as (tab: ActiveCompletedTab) => void}
-            style={styles.tabs}
-          />
+      <View style={styles.content}>
+        <ActiveCompletedTabs
+          value={activeTab}
+          onChange={setActiveTab as (tab: ActiveCompletedTab) => void}
+          style={styles.tabs}
+        />
 
+        <ScrollView
+          style={styles.listScroll}
+          contentContainerStyle={[
+            styles.listContent,
+            listings.length === 0 && styles.listContentEmpty,
+            { paddingBottom: insets.bottom + 100 },
+          ]}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={async () => {
+                setRefreshing(true);
+                try {
+                  await loadProviderListings();
+                } finally {
+                  setRefreshing(false);
+                }
+              }}
+              tintColor={palette.roleBulbColor4}
+              titleColor={palette.roleBulbColor4}
+              colors={[palette.roleBulbColor4]}
+              progressBackgroundColor={colors.surface}
+              progressViewOffset={0}
+            />
+          }
+        >
           {listings.length === 0 ? (
             <View style={styles.emptyStateCenter}>
               <View
@@ -296,8 +309,8 @@ export default function ProviderListingsScreen() {
               />
             ))
           )}
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </View>
     </View>
   );
 }
@@ -306,14 +319,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  scroll: {
+  listScroll: {
     flex: 1,
   },
-  scrollContent: {
-    flexGrow: 1,
+  listContent: {
     paddingHorizontal: 16,
+    flexGrow: 1,
   },
-  scrollContentEmpty: {
+  listContentEmpty: {
     flexGrow: 1,
     minHeight: '100%',
   },

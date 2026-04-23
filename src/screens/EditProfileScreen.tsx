@@ -143,7 +143,10 @@ const EditProfileScreen = ({ route }: Props) => {
         created_at: profile?.created_at,
         updated_at: updatedAt,
       })
-      navigation.replace('MainTabs', { screen: 'Home' })
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'MainTabs', params: { screen: 'Home' } }],
+      })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.')
     } finally {

@@ -14,6 +14,7 @@ import { useNavigation, useFocusEffect, CommonActions } from '@react-navigation/
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useThemeStore } from '../../store/themeStore';
 import { useRequestedListingsStore } from '../../store/requestedListingsStore';
+import { useRecipientFeedStore } from '../../store/recipientFeedStore';
 import { getColors, palette } from '../../utils/colors';
 import { useAppFontSizes } from '../../theme/fonts';
 import { fontFamilies } from '../../theme/typography';
@@ -26,6 +27,13 @@ import { fetchMyRequestsApi, type MyRequestItem } from '../lib/api/listings';
 
 const DEFAULT_LISTING_IMAGE = require('../assets/images/FoodOnboard1.png');
 
+function mergeMyRequestItems(existing: MyRequestItem[], incoming: MyRequestItem[]): MyRequestItem[] {
+  const map = new Map<string, MyRequestItem>();
+  for (const row of existing) map.set(row.id, row);
+  for (const row of incoming) map.set(row.id, row);
+  return [...map.values()];
+}
+
 export default function MyRequestsScreen() {
   const theme = useThemeStore((s) => s.theme);
   const isDark = theme === 'dark';
@@ -34,20 +42,55 @@ export default function MyRequestsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const setRequestedIds = useRequestedListingsStore((s) => s.setRequestedIds);
+  const cachedActiveRequests = useRecipientFeedStore((s) => s.myRequestsActive);
+  const cachedCompletedRequests = useRecipientFeedStore((s) => s.myRequestsCompleted);
+  const myRequestsLoadedOnce = useRecipientFeedStore((s) => s.myRequestsLoadedOnce);
+  const setMyRequestsCache = useRecipientFeedStore((s) => s.setMyRequests);
   const [activeTab, setActiveTab] = useState<'Active' | 'Completed'>('Active');
-  const [activeRequests, setActiveRequests] = useState<MyRequestItem[]>([]);
-  const [completedRequests, setCompletedRequests] = useState<MyRequestItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [activeRequests, setActiveRequests] = useState<MyRequestItem[]>(cachedActiveRequests);
+  const [completedRequests, setCompletedRequests] = useState<MyRequestItem[]>(cachedCompletedRequests);
+  const [recipientCacheHydrated, setRecipientCacheHydrated] = useState(
+    useRecipientFeedStore.persist.hasHydrated()
+  );
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useFocusEffect(
+    useCallback(() => {
+      if (recipientCacheHydrated) return undefined;
+      const unsub = useRecipientFeedStore.persist.onFinishHydration(() => {
+        setRecipientCacheHydrated(true);
+      });
+      return unsub;
+    }, [recipientCacheHydrated])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (cachedActiveRequests.length > 0 || cachedCompletedRequests.length > 0) {
+        setActiveRequests((prev) => mergeMyRequestItems(prev, cachedActiveRequests));
+        setCompletedRequests((prev) => mergeMyRequestItems(prev, cachedCompletedRequests));
+        setLoading(false);
+      }
+    }, [cachedActiveRequests, cachedCompletedRequests])
+  );
+
   const loadMyRequests = useCallback(async (mode: 'initial' | 'refresh' = 'initial') => {
-    if (mode === 'initial') setLoading(true);
-    else setRefreshing(true);
+    const shouldShowLoading =
+      mode === 'initial' &&
+      recipientCacheHydrated &&
+      !myRequestsLoadedOnce &&
+      cachedActiveRequests.length === 0 &&
+      cachedCompletedRequests.length === 0;
+    const shouldShowRefreshing = mode === 'refresh';
+
+    if (shouldShowLoading) setLoading(true);
+    if (shouldShowRefreshing) setRefreshing(true);
     setError(null);
     const { active, completed, error: err } = await fetchMyRequestsApi();
-    if (mode === 'initial') setLoading(false);
-    else setRefreshing(false);
+    if (shouldShowLoading) setLoading(false);
+    if (shouldShowRefreshing) setRefreshing(false);
     if (err) {
       setError(err);
       if (err === 'Your session expired. Please log in again.') {
@@ -62,8 +105,17 @@ export default function MyRequestsScreen() {
     }
     setActiveRequests(active);
     setCompletedRequests(completed);
+    // Replace cache with canonical backend result so archived/deleted rows are removed locally too.
+    setMyRequestsCache(active, completed);
     setRequestedIds([...active, ...completed].map((r) => r.id));
-  }, [setRequestedIds]);
+  }, [
+    recipientCacheHydrated,
+    myRequestsLoadedOnce,
+    cachedActiveRequests.length,
+    cachedCompletedRequests.length,
+    setRequestedIds,
+    setMyRequestsCache,
+  ]);
 
   useFocusEffect(
     useCallback(() => {
@@ -78,7 +130,6 @@ export default function MyRequestsScreen() {
   });
 
   const requests = activeTab === 'Active' ? activeRequests : completedRequests;
-  const topRefreshOffset = 20;
 
   const getClaimLabel = (item: MyRequestItem): string => {
     if (activeTab === 'Completed') return 'Completed';
@@ -93,6 +144,7 @@ export default function MyRequestsScreen() {
     title: item.title,
     source: item.source,
     distance: item.distance,
+    pickupAddress: item.pickupAddress,
     postedAgo: item.postedAgo,
     portions: item.portions,
     timeSlot: item.timeSlot,
@@ -149,11 +201,11 @@ export default function MyRequestsScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => loadMyRequests('refresh')}
-            tintColor={colors.primary}
-            titleColor={colors.primary}
-            colors={[colors.primary]}
-            progressBackgroundColor={isDark ? colors.inputFieldBg : palette.white}
-            progressViewOffset={topRefreshOffset}
+            tintColor={palette.roleBulbColor4}
+            titleColor={palette.roleBulbColor4}
+            colors={[palette.roleBulbColor4]}
+            progressBackgroundColor={colors.surface}
+            progressViewOffset={0}
           />
         }
       >

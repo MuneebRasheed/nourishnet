@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   StyleSheet,
@@ -33,6 +33,7 @@ import BoxIcon from '../assets/svgs/BoxIcon';
 import ThreelinesIcon from '../assets/svgs/ThreelinesIcon';
 import { fetchAnalyticsSummaryApi } from '../lib/api/analytics';
 import { useNotificationInboxStore } from '../../store/notificationInboxStore';
+import { useProviderImpactStore } from '../../store/providerImpactStore';
 
 const defaultAvatar = require('../assets/images/Avatar.png');
 
@@ -50,10 +51,15 @@ export default function ProviderHomeScreen() {
   const setListings = useProviderListingsStore((s) => s.setListings);
   const removeListing = useProviderListingsStore((s) => s.removeListing);
   const addListingFromApi = useProviderListingsStore((s) => s.addListingFromApi);
-  const [streakText, setStreakText] = useState('0-day streak');
-  const [mealsRescuedTotal, setMealsRescuedTotal] = useState(0);
+  const cachedStreakText = useProviderImpactStore((s) => s.streakText);
+  const cachedMealsRescuedTotal = useProviderImpactStore((s) => s.mealsRescuedTotal);
+  const setImpactCache = useProviderImpactStore((s) => s.setImpact);
+  const [streakText, setStreakText] = useState(cachedStreakText);
+  const [mealsRescuedTotal, setMealsRescuedTotal] = useState(cachedMealsRescuedTotal);
+  const [providerListingsHydrated, setProviderListingsHydrated] = useState(
+    useProviderListingsStore.persist.hasHydrated()
+  );
   const [refreshing, setRefreshing] = useState(false);
-  const topRefreshOffset = insets.top + 40;
 
   const loadProviderHomeData = useCallback(async () => {
     const analyticsPromise =
@@ -70,24 +76,47 @@ export default function ProviderHomeScreen() {
 
     if (userRole === 'provider' || userRole === 'recipient') {
       if (analyticsRes.summary) {
-        setStreakText(`${analyticsRes.summary.streakDays}-day streak`);
-        setMealsRescuedTotal(analyticsRes.summary.meals);
+        const nextStreakText = `${analyticsRes.summary.streakDays}-day streak`;
+        const nextMeals = analyticsRes.summary.meals;
+        setStreakText(nextStreakText);
+        setMealsRescuedTotal(nextMeals);
+        setImpactCache(nextStreakText, nextMeals);
       } else {
-        setStreakText('0-day streak');
-        setMealsRescuedTotal(0);
+        setStreakText(cachedStreakText);
+        setMealsRescuedTotal(cachedMealsRescuedTotal);
       }
     }
-  }, [setListings, userRole]);
+  }, [setListings, userRole, setImpactCache, cachedStreakText, cachedMealsRescuedTotal]);
 
   useFocusEffect(
     useCallback(() => {
-      let cancelled = false;
-      (async () => {
-        await loadProviderHomeData();
-        if (cancelled) return;
-      })();
-      return () => { cancelled = true; };
-    }, [loadProviderHomeData])
+      setStreakText(cachedStreakText);
+      setMealsRescuedTotal(cachedMealsRescuedTotal);
+    }, [cachedStreakText, cachedMealsRescuedTotal])
+  );
+
+  useEffect(() => {
+    if (providerListingsHydrated) return;
+    const unsub = useProviderListingsStore.persist.onFinishHydration(() => {
+      setProviderListingsHydrated(true);
+    });
+    return unsub;
+  }, [providerListingsHydrated]);
+
+  useEffect(() => {
+    // Show persisted listings/impact instantly; only fetch once when local cache is empty.
+    if (!providerListingsHydrated) return;
+    if (allListings.length > 0) return;
+    void loadProviderHomeData();
+  }, [providerListingsHydrated, allListings.length, loadProviderHomeData]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!providerListingsHydrated) return undefined;
+      // Silent refresh on revisit so cache stays fresh without blocking UI.
+      void loadProviderHomeData();
+      return undefined;
+    }, [providerListingsHydrated, loadProviderHomeData])
   );
 
   const ACTIVE_LISTING_STATUSES = useMemo(
@@ -176,11 +205,37 @@ export default function ProviderHomeScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View
+        style={[
+          styles.topSection,
+          { paddingTop: insets.top, backgroundColor: colors.background },
+        ]}
+      >
+        <HomeHeader
+          userName={getDisplayName(profile) || undefined}
+          notificationCount={notificationUnreadCount}
+          streakText={streakText}
+          avatarSource={
+            providerHomeAvatarUri
+              ? { uri: providerHomeAvatarUri }
+              : (defaultAvatar as ImageSourcePropType)
+          }
+        />
+
+        <ContinueButton
+          label="Post Surplus Food"
+          onPress={handlePostSurplus}
+          isDark={isDark}
+          icon={<Ionicons name="add" size={24} color={palette.white} />}
+          iconPosition="left"
+          style={styles.primaryCta}
+        />
+      </View>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: insets.top, paddingBottom: insets.bottom + 100 },
+          { paddingBottom: insets.bottom + 100 },
         ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -194,35 +249,14 @@ export default function ProviderHomeScreen() {
                 setRefreshing(false);
               }
             }}
-            tintColor={palette.roleBulbColor2}
-            titleColor={palette.roleBulbColor2}
-            colors={[palette.roleBulbColor2]}
-            progressBackgroundColor={isDark ? colors.inputFieldBg : palette.white}
-            progressViewOffset={topRefreshOffset}
+            tintColor={palette.roleBulbColor4}
+            titleColor={palette.roleBulbColor4}
+            colors={[palette.roleBulbColor4]}
+            progressBackgroundColor={colors.surface}
           />
         }
       >
         <View style={styles.content}>
-          <HomeHeader
-            userName={getDisplayName(profile) || undefined}
-            notificationCount={notificationUnreadCount}
-            streakText={streakText}
-            avatarSource={
-              providerHomeAvatarUri
-                ? { uri: providerHomeAvatarUri }
-                : (defaultAvatar as ImageSourcePropType)
-            }
-          />
-
-          <ContinueButton
-            label="Post Surplus Food"
-            onPress={handlePostSurplus}
-            isDark={isDark}
-            icon={<Ionicons name="add" size={24} color={palette.white} />}
-            iconPosition="left"
-            style={styles.primaryCta}
-          />
-
           <Text
             style={[
               styles.sectionTitle,
@@ -393,6 +427,9 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flex: 1,
+  },
+  topSection: {
+    paddingHorizontal: 16,
   },
   scrollContent: {
     flexGrow: 1,

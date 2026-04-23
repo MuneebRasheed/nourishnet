@@ -9,6 +9,7 @@ const NOTIFICATION_TYPES = {
   REQUEST_ACCEPTED: 'request_accepted',
   NEW_FOOD_AVAILABLE: 'new_food_available',
   REQUEST_NOT_AVAILABLE: 'request_not_available',
+  REQUEST_NOT_SUBMITTED: 'request_not_submitted',
   PICKUP_REMINDER: 'pickup_reminder',
 };
 

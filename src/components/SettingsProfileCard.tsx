@@ -126,7 +126,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   name: {
-    flex: 0,
+    flex: 1,
+    minWidth: 0,
   },
   subtitleRow: {
     flexDirection: 'row',
@@ -145,6 +146,7 @@ const styles = StyleSheet.create({
   premiumBadge: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 0,
     gap: 6,
     backgroundColor: palette.premiumBadge,
     paddingVertical: 6,

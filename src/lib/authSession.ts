@@ -5,6 +5,7 @@ import { fetchProfile, needsProfileCompletion } from './profile';
 import { markOnboardingComplete } from './onboardingStorage';
 import { clearExpoPushTokenFromProfile } from './pushNotifications';
 import { supabase } from './supabase';
+import { clearUserPersistedStores } from '../../store/clearUserPersistedStores';
 
 export async function safeSignOut(): Promise<void> {
   const {
@@ -14,21 +15,32 @@ export async function safeSignOut(): Promise<void> {
     await clearExpoPushTokenFromProfile(session.user.id).catch(() => {});
   }
   const { error } = await supabase.auth.signOut({ scope: 'local' });
-  if (!error) return;
+  if (!error) {
+    await clearUserPersistedStores();
+    return;
+  }
   const message = (error.message ?? '').toLowerCase();
-  if (message.includes('refresh token') && message.includes('not found')) return;
+  if (message.includes('refresh token') && message.includes('not found')) {
+    await clearUserPersistedStores();
+    return;
+  }
   throw error;
 }
 
-function replaceToProfileCompletion(
+function resetToProfileCompletion(
   navigation: NativeStackNavigationProp<RootStackParamList>,
   role: AuthRole,
   email: string
 ) {
-  navigation.replace(
-    role === 'provider' ? 'ProviderProfileScreen' : 'EditProfileScreen',
-    { email }
-  );
+  navigation.reset({
+    index: 0,
+    routes: [
+      {
+        name: role === 'provider' ? 'ProviderProfileScreen' : 'EditProfileScreen',
+        params: { email },
+      },
+    ],
+  });
 }
 
 export type AuthCompletionOptions = {
@@ -86,7 +98,7 @@ export async function completeAuthAndGoToMainTabs(
     }
     setAuth(role, profile);
     await markOnboardingComplete();
-    setTimeout(() => replaceToProfileCompletion(navigation, role, email), 0);
+    setTimeout(() => resetToProfileCompletion(navigation, role, email), 0);
     return { ok: true };
   }
 
@@ -95,7 +107,7 @@ export async function completeAuthAndGoToMainTabs(
     const effectiveRole = profile.role;
     setAuth(effectiveRole, profile);
     await markOnboardingComplete();
-    setTimeout(() => replaceToProfileCompletion(navigation, effectiveRole, email), 0);
+    setTimeout(() => resetToProfileCompletion(navigation, effectiveRole, email), 0);
     return { ok: true };
   }
 

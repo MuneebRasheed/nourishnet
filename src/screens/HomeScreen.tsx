@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
-import { StyleSheet, Text, View, ScrollView, RefreshControl } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, RefreshControl, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -15,6 +15,8 @@ import {
   fetchBrowseListingsApi,
   fetchMyRequestsApi,
   listingRowToProviderListing,
+  type MyRequestItem,
+  type RecipientRequestStatus,
 } from '../lib/api/listings';
 import { supabase } from '../lib/supabase';
 import HomeHeader from '../components/HomeHeader';
@@ -30,6 +32,7 @@ import type { FoodDetailItem } from './FoodDetailScreen';
 import { getAvatarLetter, getDisplayName, avatarUriWithCacheBust } from '../lib/profile';
 import { fetchStreakTextApi } from '../lib/api/analytics';
 import { useNotificationInboxStore } from '../../store/notificationInboxStore';
+import { useRecipientFeedStore } from '../../store/recipientFeedStore';
 import { getFeedRadiusMeters, haversineMeters } from '../lib/geoFeed';
 import {
   isListingVisibleForRecipient,
@@ -91,6 +94,33 @@ function shortLocation(address: string | null | undefined, maxChars = 18): strin
   return `${trimmed.slice(0, maxChars).trimEnd()}...`;
 }
 
+function mergeProviderListings(
+  existing: ProviderListing[],
+  incoming: ProviderListing[]
+): ProviderListing[] {
+  const map = new Map<string, ProviderListing>();
+  for (const row of existing) map.set(row.id, row);
+  for (const row of incoming) map.set(row.id, row);
+  return [...map.values()].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+}
+
+function buildRequestStatusMap(rows: MyRequestItem[]): Record<string, RecipientRequestStatus> {
+  const byListingId: Record<string, RecipientRequestStatus> = {};
+  for (const row of rows) {
+    if (!row?.id) continue;
+    byListingId[row.id] = row.requestStatus;
+  }
+  return byListingId;
+}
+
+function homeRequestLabel(status: RecipientRequestStatus | undefined): string {
+  if (status === 'won') return 'Accepted';
+  if (status === 'lost' || status === 'cancelled') return 'Declined Request';
+  return 'Submitted';
+}
+
 function providerListingToDetailItem(
   listing: ProviderListing,
   recipientLat: number | null,
@@ -140,43 +170,99 @@ export default function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const profile = useAuthStore((s) => s.profile);
   const userRole = useAuthStore((s) => s.userRole);
+  const cachedBrowseListings = useRecipientFeedStore((s) => s.browseListings);
+  const browseLoadedOnce = useRecipientFeedStore((s) => s.browseLoadedOnce);
+  const myRequestsLoadedOnce = useRecipientFeedStore((s) => s.myRequestsLoadedOnce);
+  const cachedCompletedIds = useRecipientFeedStore((s) => s.recipientCompletedListingIds);
+  const setBrowseListingsCache = useRecipientFeedStore((s) => s.setBrowseListings);
+  const setMyRequestsCache = useRecipientFeedStore((s) => s.setMyRequests);
+  const mergeBrowseListingsCache = useRecipientFeedStore((s) => s.mergeBrowseListings);
+  const setRecipientCompletedIdsCache = useRecipientFeedStore((s) => s.setRecipientCompletedListingIds);
   const notificationUnreadCount = useNotificationInboxStore((s) => s.unreadCount);
   const homeHeaderAvatarUri = avatarUriWithCacheBust(profile?.avatar_url, profile?.updated_at);
-  const [browseListings, setBrowseListings] = useState<ProviderListing[]>([]);
+  const [browseListings, setBrowseListings] = useState<ProviderListing[]>(cachedBrowseListings);
   /** Listing ids the current user already finished (same bucket as My Requests → Completed). Hidden from this recipient’s home feed. */
-  const [recipientCompletedListingIds, setRecipientCompletedListingIds] = useState<Set<string>>(
-    () => new Set()
+  const [recipientCompletedListingIds, setRecipientCompletedListingIds] = useState<Set<string>>(() =>
+    new Set(cachedCompletedIds)
   );
-  const [loading, setLoading] = useState(true);
+  const [recipientCacheHydrated, setRecipientCacheHydrated] = useState(
+    useRecipientFeedStore.persist.hasHydrated()
+  );
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [streakText, setStreakText] = useState('0-day streak');
+  const [myRequestStatusByListingId, setMyRequestStatusByListingId] = useState<
+    Record<string, RecipientRequestStatus>
+  >({});
   /** Bumps on Realtime effect cleanup so stagger timers from a previous subscription do not update state. */
   const recipientFeedRealtimeGen = useRef(0);
   /** INSERT → refetch after preference gap (no second Realtime event at eligible time). */
   const staggerRevealTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
+    if (recipientCacheHydrated) return;
+    const unsub = useRecipientFeedStore.persist.onFinishHydration(() => {
+      setRecipientCacheHydrated(true);
+    });
+    return unsub;
+  }, [recipientCacheHydrated]);
+
+  // Persist rehydration is async; sync hydrated cache into local screen state.
+  useEffect(() => {
+    if (cachedBrowseListings.length === 0) return;
+    setBrowseListings((prev) => mergeProviderListings(prev, cachedBrowseListings));
+    setLoading(false);
+  }, [cachedBrowseListings]);
+
+  useEffect(() => {
+    if (cachedCompletedIds.length === 0) return;
+    setRecipientCompletedListingIds(
+      (prev) => new Set<string>([...prev, ...cachedCompletedIds])
+    );
+  }, [cachedCompletedIds]);
+
+  useEffect(() => {
     let cancelled = false;
     (async () => {
-      setLoading(true);
+      if (
+        recipientCacheHydrated &&
+        !browseLoadedOnce &&
+        cachedBrowseListings.length === 0
+      ) {
+        setLoading(true);
+      }
       const [browseRes, myRes] = await Promise.all([
         fetchBrowseListingsApi(),
         fetchMyRequestsApi(),
       ]);
       if (cancelled) return;
-      setBrowseListings(browseRes.error ? [] : browseRes.listings);
+      if (!browseRes.error) {
+        setBrowseListings(browseRes.listings);
+        // Replace persisted cache with canonical backend result so deleted/archived rows disappear.
+        setBrowseListingsCache(browseRes.listings);
+      }
       if (!myRes.error) {
-        useRequestedListingsStore.getState().setRequestedIds(myRes.active.map((r) => r.id));
-        setRecipientCompletedListingIds(new Set(myRes.completed.map((r) => r.id)));
-      } else {
-        setRecipientCompletedListingIds(new Set());
+        const allRequests = [...myRes.active, ...myRes.completed];
+        useRequestedListingsStore.getState().setRequestedIds(allRequests.map((r) => r.id));
+        setMyRequestStatusByListingId(buildRequestStatusMap(allRequests));
+        const completedIds = myRes.completed.map((r) => r.id);
+        setRecipientCompletedListingIds(new Set(completedIds));
+        setRecipientCompletedIdsCache(completedIds);
+        setMyRequestsCache(myRes.active, myRes.completed);
       }
       setLoading(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [
+    recipientCacheHydrated,
+    browseLoadedOnce,
+    cachedBrowseListings.length,
+    setBrowseListingsCache,
+    setRecipientCompletedIdsCache,
+    setMyRequestsCache,
+  ]);
 
   /** Live updates when new listings are inserted (no pull-to-refresh). Geo-gated like GET /browse. */
   useEffect(() => {
@@ -268,7 +354,8 @@ export default function HomeScreen() {
             void (async () => {
               const browseRes = await fetchBrowseListingsApi();
               if (recipientFeedRealtimeGen.current !== realtimeGen || browseRes.error) return;
-              setBrowseListings(browseRes.listings);
+              setBrowseListings((prev) => mergeProviderListings(prev, browseRes.listings));
+              mergeBrowseListingsCache(browseRes.listings);
             })();
           }, delay);
           staggerRevealTimersRef.current.set(listingId, t);
@@ -282,7 +369,7 @@ export default function HomeScreen() {
       staggerRevealTimersRef.current.clear();
       void supabase.removeChannel(channel);
     };
-  }, [userRole, profile?.id, profile?.latitude, profile?.longitude]);
+  }, [userRole, profile?.id, profile?.latitude, profile?.longitude, mergeBrowseListingsCache]);
 
   useEffect(() => {
     let cancelled = false;
@@ -302,10 +389,18 @@ export default function HomeScreen() {
       fetchBrowseListingsApi(),
       fetchMyRequestsApi(),
     ]);
-    setBrowseListings(browseRes.error ? [] : browseRes.listings);
+    if (!browseRes.error) {
+      setBrowseListings(browseRes.listings);
+      setBrowseListingsCache(browseRes.listings);
+    }
     if (!myRes.error) {
-      setRequestedIds(myRes.active.map((r) => r.id));
-      setRecipientCompletedListingIds(new Set(myRes.completed.map((r) => r.id)));
+      const allRequests = [...myRes.active, ...myRes.completed];
+      setRequestedIds(allRequests.map((r) => r.id));
+      setMyRequestStatusByListingId(buildRequestStatusMap(allRequests));
+      const completedIds = myRes.completed.map((r) => r.id);
+      setRecipientCompletedListingIds(new Set(completedIds));
+      setRecipientCompletedIdsCache(completedIds);
+      setMyRequestsCache(myRes.active, myRes.completed);
     }
     setRefreshing(false);
   };
@@ -393,7 +488,7 @@ export default function HomeScreen() {
         const set = new Set(filterAllergens.map((a) => a.trim().toLowerCase()));
         list = list.filter((item) => {
           const itemAllergens = item.allergens ?? [];
-          return !itemAllergens.some((a) => set.has(a.trim().toLowerCase()));
+          return itemAllergens.some((a) => set.has(a.trim().toLowerCase()));
         });
       }
       if (filterCity && filterCity.trim()) {
@@ -420,59 +515,70 @@ export default function HomeScreen() {
         ]);
         if (cancelled) return;
         if (!myRes.error) {
-          setRequestedIds(myRes.active.map((r) => r.id));
-          setRecipientCompletedListingIds(new Set(myRes.completed.map((r) => r.id)));
+          const allRequests = [...myRes.active, ...myRes.completed];
+          setRequestedIds(allRequests.map((r) => r.id));
+          setMyRequestStatusByListingId(buildRequestStatusMap(allRequests));
+          const completedIds = myRes.completed.map((r) => r.id);
+          setRecipientCompletedListingIds(new Set(completedIds));
+          setRecipientCompletedIdsCache(completedIds);
+          setMyRequestsCache(myRes.active, myRes.completed);
         }
         if (userRole === 'recipient' && browseRes && !browseRes.error) {
           setBrowseListings(browseRes.listings);
+          setBrowseListingsCache(browseRes.listings);
         }
       })();
       return () => {
         cancelled = true;
       };
-    }, [setRequestedIds, userRole, profile?.demand_pulse_expires_at, profile?.demand_pulse_food_types])
+    }, [
+      setRequestedIds,
+      userRole,
+      setRecipientCompletedIdsCache,
+      setMyRequestsCache,
+      setBrowseListingsCache,
+      mergeBrowseListingsCache,
+    ])
   );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingTop: insets.top , paddingBottom: insets.bottom + 100 },
-        ]}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={palette.roleBulbColor2}
-            titleColor={palette.roleBulbColor2}
-            colors={[palette.roleBulbColor2]}
-            progressBackgroundColor={isDark ? colors.inputFieldBg : palette.white}
-            progressViewOffset={insets.top + 40}
+      <View style={[styles.content, { paddingTop: insets.top }]}>
+        <HomeHeader
+          userName={getDisplayName(profile)}
+          avatarLetter={getAvatarLetter(profile)}
+          avatarSource={homeHeaderAvatarUri ? { uri: homeHeaderAvatarUri } : undefined}
+          notificationCount={notificationUnreadCount}
+          streakText={streakText}
+        />
+        <View style={styles.searchSection}>
+          <SearchBarWithFilter
+            placeholder="Enter here"
+            value={search}
+            onChangeText={setSearch}
+            onFilterPress={() => setFilterModalVisible(true)}
           />
-        }
-      >
-        <View style={styles.content}>
-          <HomeHeader
-            userName={getDisplayName(profile)}
-            avatarLetter={getAvatarLetter(profile)}
-            avatarSource={homeHeaderAvatarUri ? { uri: homeHeaderAvatarUri } : undefined}
-            notificationCount={notificationUnreadCount}
-            streakText={streakText}
-          />
-          <View style={styles.searchSection}>
-            <SearchBarWithFilter
-              placeholder="Enter here"
-              value={search}
-              onChangeText={setSearch}
-              onFilterPress={() => setFilterModalVisible(true)}
+        </View>
+        <View style={styles.categoriesSection}>
+          <CategoryChips selected={category} onSelect={setCategory} />
+        </View>
+
+        <ScrollView
+          style={styles.listScroll}
+          contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 100 }]}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={palette.roleBulbColor4}
+              titleColor={palette.roleBulbColor4}
+              colors={[palette.roleBulbColor4]}
+              progressBackgroundColor={colors.surface}
+              progressViewOffset={0}
             />
-          </View>
-          <View style={styles.categoriesSection}>
-            <CategoryChips selected={category} onSelect={setCategory} />
-          </View>
+          }
+        >
           <View style={styles.sectionHeader}>
             <Text
               style={[
@@ -489,7 +595,11 @@ export default function HomeScreen() {
             </View>
           </View>
           <View style={styles.cards}>
-            {displayList.length === 0 ? (
+            {loading && displayList.length === 0 ? (
+              <View style={styles.emptyStateCenter}>
+                <ActivityIndicator size="large" color={colors.primary} />
+              </View>
+            ) : displayList.length === 0 ? (
               <View style={styles.emptyStateCenter}>
                 <View style={styles.emptyStateCard}>
                   <View style={styles.emptyStateIconWrap}>
@@ -524,7 +634,9 @@ export default function HomeScreen() {
               </View>
             ) : (
               displayList.map((item) => {
-                const requested = isRequested(item.id);
+                const requestStatus = myRequestStatusByListingId[item.id];
+                const requested = isRequested(item.id) || requestStatus != null;
+                const requestedLabel = homeRequestLabel(requestStatus);
 
                 const handlePress = () => {
                   // Card button only navigates to detail; user submits request on detail screen
@@ -547,13 +659,13 @@ export default function HomeScreen() {
                           fontSize: fonts.caption,
                         }}
                       >
-                        Submitted
+                        {requestedLabel}
                       </Text>
                     )}
 
                     <FoodCard
                       item={item as FoodCardData}
-                      claimLabel={requested ? 'Request Submitted' : 'Request This Food'}
+                      claimLabel={requested ? requestedLabel : 'Request This Food'}
                       claimButtonVariant={requested ? 'outline' : 'primary'}
                       claimButtonBgColor={requested ? colors.inputFieldBg : undefined}
                       claimButtonTextColor={requested ? colors.textSecondary : undefined}
@@ -567,8 +679,8 @@ export default function HomeScreen() {
               })
             )}
           </View>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </View>
       <FilterModal
         visible={filterModalVisible}
         onClose={() => setFilterModalVisible(false)}
@@ -584,14 +696,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  scroll: {
+  content: {
     flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
     paddingHorizontal: 16,
   },
-  content: {},
   searchSection: {
     marginTop: 20,
   },
@@ -614,6 +722,12 @@ const styles = StyleSheet.create({
   },
   availableText: {
     color: '#fff',
+  },
+  listScroll: {
+    flex: 1,
+  },
+  listContent: {
+    flexGrow: 1,
   },
   cards: {
     paddingBottom: 8,
