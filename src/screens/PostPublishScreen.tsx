@@ -138,6 +138,7 @@ export default function PostPublishScreen() {
   const [confirmations, setConfirmations] = useState<boolean[]>([false, false, false, false]);
   const [addressPredictions, setAddressPredictions] = useState<PlacePrediction[]>([]);
   const [loadingAddressSuggestions, setLoadingAddressSuggestions] = useState(false);
+  const [showAddressSuggestions, setShowAddressSuggestions] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skipNextAddressFetchRef = useRef(false);
 
@@ -182,11 +183,20 @@ export default function PostPublishScreen() {
       setGapAmount('2');
       setGapUnit('minutes');
     }
+    setShowAddressSuggestions(false);
+    setAddressPredictions([]);
+    setLoadingAddressSuggestions(false);
     setShowGapUnitDropdown(false);
   }, [editListing, repostSourceListing, profile?.business_address]);
 
   useEffect(() => {
     if (!isGoogleMapsConfigured()) return;
+    if (!showAddressSuggestions) {
+      setAddressPredictions([]);
+      setLoadingAddressSuggestions(false);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      return;
+    }
     if (skipNextAddressFetchRef.current) {
       skipNextAddressFetchRef.current = false;
       return;
@@ -210,7 +220,7 @@ export default function PostPublishScreen() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [pickupAddress]);
+  }, [pickupAddress, showAddressSuggestions]);
 
   useEffect(() => {
     return () => {
@@ -407,7 +417,9 @@ export default function PostPublishScreen() {
     Keyboard.dismiss();
     if (debounceRef.current) clearTimeout(debounceRef.current);
     skipNextAddressFetchRef.current = true;
+    setShowAddressSuggestions(false);
     setAddressPredictions([]);
+    setLoadingAddressSuggestions(false);
     setPickupAddress(prediction.description);
   };
 
@@ -463,12 +475,22 @@ export default function PostPublishScreen() {
             }
             value={pickupAddress}
             onChangeText={(value) => {
+              setShowAddressSuggestions(true);
               setPickupAddress(value);
+            }}
+            onFocus={() => {
+              setAddressPredictions([]);
+              setLoadingAddressSuggestions(false);
+            }}
+            onBlur={() => {
+              setShowAddressSuggestions(false);
+              setAddressPredictions([]);
+              setLoadingAddressSuggestions(false);
             }}
             leftIcon={<LocationPin width={20} height={20} color={colors.text} />}
             containerStyle={styles.authInputContainer}
           />
-          {loadingAddressSuggestions ? (
+          {showAddressSuggestions && loadingAddressSuggestions ? (
             <View style={styles.addressLoadingRow}>
               <ActivityIndicator size="small" color={colors.primary} />
               <Text
@@ -485,7 +507,7 @@ export default function PostPublishScreen() {
               </Text>
             </View>
           ) : null}
-          {addressPredictions.length > 0 ? (
+          {showAddressSuggestions && addressPredictions.length > 0 ? (
             <View
               style={[
                 styles.addressSuggestions,
