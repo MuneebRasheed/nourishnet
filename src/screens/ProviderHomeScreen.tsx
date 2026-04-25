@@ -34,6 +34,8 @@ import ThreelinesIcon from '../assets/svgs/ThreelinesIcon';
 import { fetchAnalyticsSummaryApi } from '../lib/api/analytics';
 import { useNotificationInboxStore } from '../../store/notificationInboxStore';
 import { useProviderImpactStore } from '../../store/providerImpactStore';
+import { getMonthlyPostCount, getSubscriptionTier, getMonthlyPostLimit } from '../lib/subscriptionLimits';
+import { useOfferingsStore } from '../../store/offeringsStore';
 
 const defaultAvatar = require('../assets/images/Avatar.png');
 
@@ -54,12 +56,17 @@ export default function ProviderHomeScreen() {
   const cachedStreakText = useProviderImpactStore((s) => s.streakText);
   const cachedMealsRescuedTotal = useProviderImpactStore((s) => s.mealsRescuedTotal);
   const setImpactCache = useProviderImpactStore((s) => s.setImpact);
+  const customerInfo = useOfferingsStore((s) => s.customerInfo);
   const [streakText, setStreakText] = useState(cachedStreakText);
   const [mealsRescuedTotal, setMealsRescuedTotal] = useState(cachedMealsRescuedTotal);
+  const [monthlyPostCount, setMonthlyPostCount] = useState<number | null>(null);
   const [providerListingsHydrated, setProviderListingsHydrated] = useState(
     useProviderListingsStore.persist.hasHydrated()
   );
   const [refreshing, setRefreshing] = useState(false);
+
+  const subscriptionTier = useMemo(() => getSubscriptionTier(customerInfo), [customerInfo]);
+  const monthlyPostLimit = useMemo(() => getMonthlyPostLimit(subscriptionTier), [subscriptionTier]);
 
   const loadProviderHomeData = useCallback(async () => {
     const analyticsPromise =
@@ -86,7 +93,15 @@ export default function ProviderHomeScreen() {
         setMealsRescuedTotal(cachedMealsRescuedTotal);
       }
     }
-  }, [setListings, userRole, setImpactCache, cachedStreakText, cachedMealsRescuedTotal]);
+
+    // Load monthly post count for free plan users
+    if (profile?.id && subscriptionTier === 'free') {
+      const { count } = await getMonthlyPostCount(profile.id);
+      setMonthlyPostCount(count);
+    } else {
+      setMonthlyPostCount(null);
+    }
+  }, [setListings, userRole, setImpactCache, cachedStreakText, cachedMealsRescuedTotal, profile?.id, subscriptionTier]);
 
   useFocusEffect(
     useCallback(() => {
@@ -230,6 +245,36 @@ export default function ProviderHomeScreen() {
           iconPosition="left"
           style={styles.primaryCta}
         />
+        
+        {/* Monthly post limit indicator for free plan */}
+        {subscriptionTier === 'free' && monthlyPostCount !== null && (
+          <View style={[styles.postLimitBanner, { backgroundColor: isDark ? colors.inputFieldBg : palette.notificationFreshBg }]}>
+            <View style={styles.postLimitContent}>
+              <Ionicons 
+                name="information-circle-outline" 
+                size={20} 
+                color={monthlyPostCount >= monthlyPostLimit ? palette.errorRed : colors.primary} 
+              />
+              <Text style={[styles.postLimitText, { color: colors.text, fontFamily: fontFamilies.inter, fontSize: fonts.caption }]}>
+                {monthlyPostCount >= monthlyPostLimit ? (
+                  <>You've used all {monthlyPostLimit} posts this month</>
+                ) : (
+                  <>{monthlyPostCount}/{monthlyPostLimit} posts used this month</>
+                )}
+              </Text>
+            </View>
+            {monthlyPostCount >= monthlyPostLimit && (
+              <TouchableOpacity 
+                onPress={() => navigation.navigate('SubscriptionManagementScreen')}
+                style={styles.upgradeLinkButton}
+              >
+                <Text style={[styles.upgradeLinkText, { color: colors.primary, fontFamily: fontFamilies.interMedium, fontSize: fonts.caption }]}>
+                  Upgrade to Pro
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
       </View>
       <ScrollView
         style={styles.scroll}

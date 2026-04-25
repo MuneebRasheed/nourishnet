@@ -50,6 +50,8 @@ import {
   isGoogleMapsConfigured,
   type PlacePrediction,
 } from '../lib/googleMaps';
+import { canCreatePost } from '../lib/subscriptionLimits';
+import { useOfferingsStore } from '../../store/offeringsStore';
 
 function formatTimeForDisplay(date: Date): string {
   return date.toLocaleTimeString('en-US', {
@@ -97,6 +99,7 @@ export default function PostPublishScreen() {
   const profile = useAuthStore((s) => s.profile);
   const defaultPickupFromBusinessProfile = profile?.business_address?.trim() ?? '';
   const addListingFromApi = useProviderListingsStore((s) => s.addListingFromApi);
+  const customerInfo = useOfferingsStore((s) => s.customerInfo);
   const [publishing, setPublishing] = useState(false);
 
   const getDefaultStart = () => {
@@ -337,6 +340,33 @@ export default function PostPublishScreen() {
       Alert.alert('Sign in required', 'Please sign in again to publish or edit listings.');
       navigation.replace('LoginScreen');
       return;
+    }
+
+    // Check monthly post limit for free plan users (only for new posts, not edits)
+    if (!editListing) {
+      const limitCheck = await canCreatePost(session.user.id, customerInfo);
+      
+      if (limitCheck.error) {
+        Alert.alert('Error', 'Unable to verify post limit. Please try again.');
+        return;
+      }
+      
+      if (!limitCheck.allowed) {
+        Alert.alert(
+          'Monthly Limit Reached',
+          `You've reached your monthly limit of ${limitCheck.limit} posts on the Free plan. You've created ${limitCheck.currentCount} posts this month.\n\nUpgrade to Pro for unlimited posts and more features!`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Upgrade to Pro',
+              onPress: () => {
+                navigation.navigate('SubscriptionManagementScreen');
+              },
+            },
+          ]
+        );
+        return;
+      }
     }
 
     const totalQuantity = resolveTotalQuantityForSave(draft.quantity, editListing);

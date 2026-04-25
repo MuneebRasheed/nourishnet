@@ -196,10 +196,18 @@ export default function SubscriptionManagementScreen() {
 
         <SubscriptionPlanCard
           icon={<StarIcon width={20} height={18} color={palette.basicIconColor} />}
-          title="Basic"
+          title="Free"
           priceText="Free"
           pricePeriodLabel=""
-          features={['Browse listings', 'Request food', 'Pickup notifications']}
+          features={[
+            'Browse food near you',
+            'Claim food',
+            'Notifications',
+            'Fair queue access',
+            'Secure pickup (PIN)',
+            'Up to 5 posts/month (providers)',
+            'Basic impact count'
+          ]}
           buttonLabel="Current Plan"
           isCurrentPlan={basicIsCurrent}
           isDark={isDark}
@@ -207,36 +215,29 @@ export default function SubscriptionManagementScreen() {
           customButtonTextColor={colors.text}
         />
 
-        <SubscriptionPlanCard
-          icon={<KingIcon width={20} height={16} color={palette.kingIconColor} />}
-          title="Plus"
-          priceText={plusPriceText}
-          pricePeriodLabel={pricePeriodLabel}
-          features={['Everything in Basic', 'Priority requests', 'Unlimited listings']}
-          buttonLabel={plusIsCurrent ? 'Current Plan' : proIsCurrent ? 'Included with Pro' : 'Upgrade to Plus'}
-          isCurrentPlan={plusIsCurrent}
-          isMostPopular
-          offerTag={billingPeriod === 'annual' ? 'Best value' : undefined}
-          isDark={isDark}
-          customCardBackgroundColor={palette.notificationFreshBg}
-          customCardBorderColor={colors.primary}
-          customCardBorderWidth={1}
-          customTitleColor={colors.text}
-          customButtonTextColor={palette.white}
-          buttonDisabled={proIsCurrent}
-          isLoading={purchasing === 'plus'}
-          onButtonPress={() => void handlePurchase(plusPackage, 'plus')}
-        />
+        {/* Plus plan hidden - only showing Free and Pro plans */}
 
         <SubscriptionPlanCard
           icon={<DiamondIcon width={20} height={18} color={palette.diamondIconColor} />}
           title="Pro"
           priceText={proPriceText}
           pricePeriodLabel={pricePeriodLabel}
-          features={['Everything in Plus', 'Analytics dashboard', 'Premium badge']}
+          features={[
+            'Unlimited posts',
+            'Priority listing visibility',
+            'Demand insights',
+            'Auto-reminders to post surplus',
+            'Monthly impact summary',
+            'Community Partner badge'
+          ]}
           buttonLabel={proIsCurrent ? 'Current Plan' : 'Upgrade to Pro'}
           isCurrentPlan={proIsCurrent}
+          isMostPopular
+          offerTag={billingPeriod === 'annual' ? 'Best value' : undefined}
           isDark={isDark}
+          customCardBackgroundColor={palette.notificationFreshBg}
+          customCardBorderColor={colors.primary}
+          customCardBorderWidth={1}
           customTitleColor={colors.text}
           customButtonTextColor={proIsCurrent ? colors.textSecondary : palette.white}
           customButtonBackgroundColor={proIsCurrent ? colors.inputFieldBg : undefined}

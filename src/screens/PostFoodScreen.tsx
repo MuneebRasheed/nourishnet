@@ -38,6 +38,8 @@ import {
 import { findMostRecentListingForRepost } from '../lib/repostFromPrevious';
 import { supabase } from '../lib/supabase';
 import { useProviderListingsStore, type ProviderListing, type ProviderListingDraft } from '../../store/providerListingsStore';
+import { canCreatePost } from '../lib/subscriptionLimits';
+import { useOfferingsStore } from '../../store/offeringsStore';
 const QUANTITY_UNITS = ['Bags', 'Portions', 'Pounds', 'Kilos', 'Servings', 'Items'];
 const DIETARY_TAGS = ['Vegetarian', 'Vegan', 'Dairy-Free', 'Gluten-Free', 'Halal', 'Kosher', 'Nut-Free'];
 const ALLERGENS = ['None', 'Gluten', 'Dairy', 'Eggs', 'Nuts', 'Peanuts', 'Shellfish', 'Fish', 'Sesame', 'Soy'];
@@ -97,6 +99,54 @@ export default function PostFoodScreen() {
   const [hasPriorListing, setHasPriorListing] = useState(false);
 
   const addListingFromApi = useProviderListingsStore((s) => s.addListingFromApi);
+  const customerInfo = useOfferingsStore((s) => s.customerInfo);
+
+  // Check monthly post limit when screen loads (only for new posts, not edits)
+  useFocusEffect(
+    useCallback(() => {
+      if (editListing) return; // Skip check for edits
+      
+      let cancelled = false;
+      
+      (async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user || cancelled) return;
+        
+        const limitCheck = await canCreatePost(session.user.id, customerInfo);
+        
+        if (cancelled) return;
+        
+        if (!limitCheck.allowed && !limitCheck.error) {
+          Alert.alert(
+            'Monthly Limit Reached',
+            `You've reached your monthly limit of ${limitCheck.limit} posts on the Free plan. You've created ${limitCheck.currentCount} posts this month.\n\nUpgrade to Pro for unlimited posts and more features!`,
+            [
+              {
+                text: 'View Plans',
+                onPress: () => {
+                  navigation.replace('SubscriptionManagementScreen');
+                },
+              },
+              {
+                text: 'Go Back',
+                style: 'cancel',
+                onPress: () => {
+                  if (navigation.canGoBack()) {
+                    navigation.goBack();
+                  }
+                },
+              },
+            ],
+            { cancelable: false }
+          );
+        }
+      })();
+      
+      return () => {
+        cancelled = true;
+      };
+    }, [editListing, customerInfo, navigation])
+  );
 
   const persistListingFromApi = async (listing: ProviderListing) => {
     const open =
