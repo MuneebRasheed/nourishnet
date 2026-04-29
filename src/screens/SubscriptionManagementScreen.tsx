@@ -34,9 +34,6 @@ import DiamondIcon from '../assets/svgs/DiamondIcon';
 
 type BillingPeriod = 'monthly' | 'annual';
 
-const PLUS_PACKAGE_MONTHLY = 'monthly_plus';
-const PLUS_PACKAGE_ANNUAL = 'yearly_plus';
-
 function activeSubscriptionTier(info: CustomerInfo | null): 'basic' | 'plus' | 'pro' {
   if (!info) {
     return 'basic';
@@ -54,15 +51,40 @@ function activeSubscriptionTier(info: CustomerInfo | null): 'basic' | 'plus' | '
   return hasPlus ? 'plus' : 'basic';
 }
 
-function findPlusPackage(
+function findProPackage(
   packages: readonly PurchasesPackage[] | undefined,
   billing: BillingPeriod
 ): PurchasesPackage | null {
   if (!packages?.length) {
     return null;
   }
-  const id = billing === 'annual' ? PLUS_PACKAGE_ANNUAL : PLUS_PACKAGE_MONTHLY;
-  return packages.find((p) => p.identifier === id) ?? null;
+  
+  // Find Pro packages by checking if product identifier contains "pro_"
+  const proPackages = packages.filter((p) => {
+    const productId = p.product.identifier.toLowerCase();
+    return productId.includes('pro_');
+  });
+
+  if (!proPackages.length) {
+    return null;
+  }
+
+  // Filter by billing period
+  if (billing === 'annual') {
+    // Look for yearly/annual in product ID or subscription period of 1 year
+    return proPackages.find((p) => {
+      const productId = p.product.identifier.toLowerCase();
+      const period = p.product.subscriptionPeriod?.toLowerCase() || '';
+      return productId.includes('yearly') || productId.includes('annual') || period.includes('p1y');
+    }) ?? null;
+  } else {
+    // Look for monthly in product ID or subscription period of 1 month
+    return proPackages.find((p) => {
+      const productId = p.product.identifier.toLowerCase();
+      const period = p.product.subscriptionPeriod?.toLowerCase() || '';
+      return productId.includes('monthly') || period.includes('p1m');
+    }) ?? null;
+  }
 }
 
 export default function SubscriptionManagementScreen() {
@@ -83,17 +105,13 @@ export default function SubscriptionManagementScreen() {
 
   const currentOffering = offerings?.current ?? null;
 
-  const { plusPackage, proPackage } = useMemo(() => {
+  const proPackage = useMemo(() => {
     if (!currentOffering) {
-      return { plusPackage: null as PurchasesPackage | null, proPackage: null as PurchasesPackage | null };
+      return null;
     }
-    const plus = findPlusPackage(currentOffering.availablePackages, billingPeriod);
-    const pro =
-      billingPeriod === 'annual' ? currentOffering.annual ?? null : currentOffering.monthly ?? null;
-    return { plusPackage: plus, proPackage: pro };
+    return findProPackage(currentOffering.availablePackages, billingPeriod);
   }, [currentOffering, billingPeriod]);
 
-  const plusPriceText = plusPackage?.product.priceString ?? '—';
   const proPriceText = proPackage?.product.priceString ?? '—';
   const pricePeriodLabel = billingPeriod === 'annual' ? '/year' : '/month';
 
@@ -109,7 +127,7 @@ export default function SubscriptionManagementScreen() {
     if (navigation.canGoBack()) navigation.goBack();
   };
 
-  const handlePurchase = async (pkg: PurchasesPackage | null, plan: 'plus' | 'pro') => {
+  const handlePurchase = async (pkg: PurchasesPackage | null) => {
     if (!pkg) {
       Alert.alert(
         'Unavailable',
@@ -117,7 +135,7 @@ export default function SubscriptionManagementScreen() {
       );
       return;
     }
-    setPurchasing(plan);
+    setPurchasing('pro');
     try {
       const { customerInfo: next } = await Purchases.purchasePackage(pkg);
       setCustomerInfo(next);
@@ -242,7 +260,7 @@ export default function SubscriptionManagementScreen() {
           customButtonTextColor={proIsCurrent ? colors.textSecondary : palette.white}
           customButtonBackgroundColor={proIsCurrent ? colors.inputFieldBg : undefined}
           isLoading={purchasing === 'pro'}
-          onButtonPress={() => void handlePurchase(proPackage, 'pro')}
+          onButtonPress={() => void handlePurchase(proPackage)}
         />
 
         <View style={styles.footer}>

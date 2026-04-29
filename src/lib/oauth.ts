@@ -25,6 +25,7 @@ function ensureGoogleConfigured() {
   GoogleSignin.configure({
     webClientId: GOOGLE_WEB_CLIENT_ID || undefined,
     iosClientId: GOOGLE_IOS_CLIENT_ID || undefined,
+    offlineAccess: false,
   });
   googleConfigured = true;
 }

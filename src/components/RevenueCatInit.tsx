@@ -19,6 +19,9 @@ export default function RevenueCatInit() {
     const apiKey =
       Platform.OS === 'ios' ? IOS_KEY : Platform.OS === 'android' ? ANDROID_KEY : undefined;
 
+      console.log("apiKey.............",apiKey);
+      
+
     if (!apiKey) {
       if (__DEV__) {
         console.warn('[RevenueCat] Missing EXPO_PUBLIC_REVENUECAT_IOS_API_KEY / ANDROID_API_KEY');
@@ -30,9 +33,9 @@ export default function RevenueCatInit() {
 
     void (async () => {
       try {
-        if (Platform.OS === 'ios') {
+        // if (Platform.OS === 'ios') {
           await Purchases.setLogLevel(LOG_LEVEL.VERBOSE);
-        }
+        // }
 
         if (cancelled) {
           return;
@@ -45,17 +48,17 @@ export default function RevenueCatInit() {
           return;
         }
         useOfferingsStore.getState().setOfferings(offerings);
-        if (Platform.OS === 'ios') {
+        // if (Platform.OS === 'ios') {
           console.log('[RevenueCat] getOfferings', JSON.stringify(offerings, null, 2));
-        }
+        // }
       } catch (err) {
         if (cancelled) {
           return;
         }
         useOfferingsStore.getState().setOfferings(null);
-        if (Platform.OS === 'ios') {
+        // if (Platform.OS === 'ios') {
           console.warn('[RevenueCat] getOfferings failed', err);
-        }
+        // }
       }
 
       try {
