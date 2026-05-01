@@ -35,11 +35,13 @@ export type ProviderListingDraft = Omit<
 
 interface ProviderListingsState {
   listings: ProviderListing[];
+  hasPriorListing: boolean;
   addListing: (draft: ProviderListingDraft) => void;
   addListingFromApi: (listing: ProviderListing) => void;
   setListings: (listings: ProviderListing[]) => void;
   removeListing: (id: string) => void;
   completeListing: (id: string) => void;
+  setHasPriorListing: (hasPrior: boolean) => void;
   clearAll: () => void;
 }
 
@@ -47,6 +49,7 @@ export const useProviderListingsStore = create<ProviderListingsState>()(
   persist(
     (set) => ({
       listings: [],
+      hasPriorListing: false,
       addListing: (draft) =>
         set((state) => ({
           listings: [
@@ -74,7 +77,8 @@ export const useProviderListingsStore = create<ProviderListingsState>()(
             listing.id === id ? { ...listing, status: 'completed' } : listing
           ),
         })),
-      clearAll: () => set({ listings: [] }),
+      setHasPriorListing: (hasPrior) => set({ hasPriorListing: hasPrior }),
+      clearAll: () => set({ listings: [], hasPriorListing: false }),
     }),
     {
       name: 'nourishnet-provider-listings',

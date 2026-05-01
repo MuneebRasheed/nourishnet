@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import { StyleSheet, View, Text } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import * as ExpoSplashScreen from 'expo-splash-screen';
 
 import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
@@ -97,6 +98,14 @@ const SplashScreen = () => {
       if (cancelled) return;
       const session = await getStableSession();
       if (cancelled) return;
+      
+      // Ensure native splash is hidden before navigation
+      try {
+        await ExpoSplashScreen.hideAsync();
+      } catch (e) {
+        // Splash screen might already be hidden
+      }
+      
       if (session?.user) {
         const profile = await fetchProfile(session.user.id);
         if (cancelled) return;

@@ -1,7 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Image, ImageSourcePropType } from 'react-native';
 import FireStreak from '../assets/svgs/FireStreak';
-import CrownIcon from '../assets/svgs/CrownIcon';
 import { useThemeStore } from '../../store/themeStore';
 import { getColors, palette } from '../../utils/colors';
 import { useAppFontSizes } from '../../theme/fonts';
@@ -17,8 +16,8 @@ export type SettingsProfileCardProps = {
   avatarLetter?: string;
   avatarSource?: ImageSourcePropType | null;
   onEditPress?: () => void;
-  /** When true, shows the Premium badge (crown + "Premium") on the card. Use for provider users. */
-  showPremium?: boolean;
+  /** Badge type to show: 'premium' for pro subscribers, 'basic' for free tier, or null to hide badge */
+  badgeType?: 'premium' | 'basic' | null;
 };
 
 export default function SettingsProfileCard({
@@ -27,7 +26,7 @@ export default function SettingsProfileCard({
   avatarLetter = 'A',
   avatarSource = defaultAvatarImage,
   onEditPress,
-  showPremium = false,
+  badgeType = null,
 }: SettingsProfileCardProps) {
   const theme = useThemeStore((s) => s.theme);
   const isDark = theme === 'dark';
@@ -56,12 +55,19 @@ export default function SettingsProfileCard({
           >
             {displayName}
           </Text>
-          {showPremium && (
+          {badgeType === 'premium' && (
             <View style={styles.premiumBadge}>
               <KingIcon
                width={16} height={12} color={palette.white} />
               <Text style={[styles.premiumText, { fontFamily: fontFamilies.interSemiBold, fontSize: fonts.caption + 1 }]}>
                 Premium
+              </Text>
+            </View>
+          )}
+          {badgeType === 'basic' && (
+            <View style={styles.basicBadge}>
+              <Text style={[styles.basicText, { fontFamily: fontFamilies.interSemiBold, fontSize: fonts.caption + 1 }]}>
+                Basic
               </Text>
             </View>
           )}
@@ -156,6 +162,20 @@ const styles = StyleSheet.create({
   },
   premiumText: {
     color: palette.white,
+  },
+  basicBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 0,
+    gap: 6,
+    backgroundColor: palette.settingsIconBg,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 100,
+    marginLeft: 16,
+  },
+  basicText: {
+    color: palette.timerIconColor,
   },
   editButton: {
     paddingVertical: 6,

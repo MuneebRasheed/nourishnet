@@ -656,7 +656,7 @@ export default function HomeScreen() {
                       },
                     ]}
                   >
-                    We’ll notify you as soon as something is posted near you!
+                    Help bring food to your area -- invite local restaurants!
                   </Text>
                 </View>
               </View>

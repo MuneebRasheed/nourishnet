@@ -94,7 +94,10 @@ const styles = StyleSheet.create({
     gap: 6,
     marginBottom: 8,
   },
-  statCardTitle: {},
+  statCardTitle: {
+    flex: 1,
+    flexShrink: 1,
+  },
   statValue: {},
   statLabel: {
     marginTop: 4,

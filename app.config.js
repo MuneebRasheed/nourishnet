@@ -19,6 +19,7 @@ plugins.push([
   'expo-notifications',
   {
     enableBackgroundRemoteNotifications: true,
+    mode: 'production',
   },
 ]);
 

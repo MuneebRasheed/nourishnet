@@ -34,6 +34,18 @@ export async function saveExpoPushTokenToProfile(userId: string, token: string):
   const trimmed = token.trim();
   if (!trimmed) return;
 
+  // Check if token is already saved to avoid unnecessary updates
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('expo_push_token')
+    .eq('id', userId)
+    .single();
+
+  if (profile?.expo_push_token === trimmed) {
+    console.log('[push] Token already saved, skipping update');
+    return;
+  }
+
   // Preferred path: atomically reassign token ownership to current user.
   const { error: rpcError } = await supabase.rpc('set_my_expo_push_token', {
     p_token: trimmed,

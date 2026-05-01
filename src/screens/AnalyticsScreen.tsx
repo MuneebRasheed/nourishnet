@@ -21,6 +21,8 @@ import BatchIcon from '../assets/svgs/BatchIcon';
 import UpwardArrow from '../assets/svgs/UpwardArrow';
 import ArrowCurve from '../assets/svgs/ArrowCurve';
 import { fetchAnalyticsSummaryApi } from '../lib/api/analytics';
+import { useRecipientFeedStore } from '../../store/recipientFeedStore';
+import { fetchBrowseListingsApi } from '../lib/api/listings';
 
 const CHART_HEIGHT = 150;
 const CHART_TICK_STEPS = 5;
@@ -87,6 +89,7 @@ export default function AnalyticsScreen() {
   const [ecoWarriorAgo, setEcoWarriorAgo] = useState(initialSnapshot.ecoWarriorAgo);
   const [lastPickupDate, setLastPickupDate] = useState(initialSnapshot.lastPickupDate);
   const [pickupSuccessRate, setPickupSuccessRate] = useState(initialSnapshot.pickupSuccessRate);
+  const [availableMealsCount, setAvailableMealsCount] = useState(0);
 
   const applySnapshot = (snapshot: AnalyticsSummaryCache) => {
     setMeals(snapshot.meals);
@@ -112,6 +115,17 @@ export default function AnalyticsScreen() {
       const snapshot = toSnapshotFromApi(summary);
       applySnapshot(snapshot);
       setRoleSummaryCache(activeRole, snapshot);
+      
+      // Fetch available meals count for recipients
+      if (activeRole === 'recipient') {
+        const browseRes = await fetchBrowseListingsApi();
+        if (!browseRes.error && !cancelled) {
+          const activeListings = browseRes.listings.filter(
+            (l) => l.status === 'active' || l.status === 'request_open' || l.status === 'claimed'
+          );
+          setAvailableMealsCount(activeListings.length);
+        }
+      }
     };
 
     load();
@@ -130,6 +144,17 @@ export default function AnalyticsScreen() {
         const snapshot = toSnapshotFromApi(summary);
         applySnapshot(snapshot);
         setRoleSummaryCache(activeRole, snapshot);
+        
+        // Fetch available meals count for recipients
+        if (activeRole === 'recipient') {
+          const browseRes = await fetchBrowseListingsApi();
+          if (!browseRes.error && !cancelled) {
+            const activeListings = browseRes.listings.filter(
+              (l) => l.status === 'active' || l.status === 'request_open' || l.status === 'claimed'
+            );
+            setAvailableMealsCount(activeListings.length);
+          }
+        }
       })();
       return () => {
         cancelled = true;
@@ -251,7 +276,7 @@ export default function AnalyticsScreen() {
                 <ImpactCard
                   variant="stat"
                   icon={<UpwardArrow width={20} height={20} color={palette.logoutColor} />}
-                  title="Success Rate"
+                  title="Pickup Success Rate"
                   value={`${pickupSuccessRate}%`}
                   label="Requests accepted"
                   accentColor={palette.logoutColor}
@@ -259,9 +284,9 @@ export default function AnalyticsScreen() {
                 <ImpactCard
                   variant="stat"
                   icon={<BatchIcon width={20} height={20} color={palette.roleBulbColor3} />}
-                  title="Streak"
-                  value={String(streakDays)}
-                  label="Day Streak"
+                  title="Food Available"
+                  value={String(availableMealsCount)}
+                  label="Meals available"
                   accentColor={palette.roleBulbColor3}
                 />
               </>

@@ -21,6 +21,7 @@ import { getDisplayName, getAvatarLetter, avatarUriWithCacheBust } from '../lib/
 import { useThemeStore, useResolvedIsDark } from '../../store/themeStore';
 import { useSettingsStore } from '../../store/settingStore';
 import { useAuthStore, isProviderSession } from '../../store/authStore';
+import { useOfferingsStore } from '../../store/offeringsStore';
 import { clearUserPersistedStores } from '../../store/clearUserPersistedStores';
 import { fetchProfile } from '../lib/profile';
 import { getColors, palette } from '../../utils/colors';
@@ -33,7 +34,6 @@ import SettingsRow from '../components/SettingsRow';
 import CustomSwitch from '../components/CustomSwitch';
 import ContinueButton from '../components/ContinueButton';
 import Logout from '../assets/svgs/Logout';
-import SplashIcon from '../assets/svgs/SplashIcon';
 import PartnerIcon from '../assets/svgs/PartnerIcon';
 import ProfileFood from '../assets/svgs/ProfileFood';
 import BellIcon from '../assets/svgs/BellIcon';
@@ -42,11 +42,25 @@ import LockIcon from '../assets/svgs/LockIcon';
 import Ticon from '../assets/svgs/Ticon';
 import LightIcon from '../assets/svgs/LightIcon';
 import DeleteIcon from '../assets/svgs/DeleteIcon';
-import CrownIcon from '../assets/svgs/CrownIcon';
 import KingIcon from '../assets/svgs/KingIcon';
 import { fetchStreakTextApi } from '../lib/api/analytics';
 import { API_BASE_URL } from '../lib/api/client';
 import { safeSignOut } from '../lib/authSession';
+
+// Helper function to determine subscription tier
+function activeSubscriptionTier(customerInfo: any): 'basic' | 'pro' {
+  if (!customerInfo) {
+    return 'basic';
+  }
+  for (const ent of Object.values(customerInfo.entitlements.active)) {
+    const pid = ((ent as any)?.productIdentifier ?? '').toLowerCase();
+    if (pid.includes('pro_')) {
+      return 'pro';
+    }
+  }
+  return 'basic';
+}
+
 export default function SettingsScreen() {
   const theme = useThemeStore((s) => s.theme);
   const isDark = useResolvedIsDark();
@@ -60,8 +74,16 @@ export default function SettingsScreen() {
   const largeFont = useSettingsStore((s) => s.largeFont);
   const setLargeFont = useSettingsStore((s) => s.setLargeFont);
   const isProvider = isProviderSession(userRole, profile);
+  const customerInfo = useOfferingsStore((s) => s.customerInfo);
   const settingsAvatarUri = avatarUriWithCacheBust(profile?.avatar_url, profile?.updated_at);
   const [streakText, setStreakText] = useState('0-day streak');
+
+  // Determine badge type based on provider status and subscription
+  const badgeType = React.useMemo(() => {
+    if (!isProvider) return null;
+    const tier = activeSubscriptionTier(customerInfo);
+    return tier === 'pro' ? 'premium' : 'basic';
+  }, [isProvider, customerInfo]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -72,6 +94,17 @@ export default function SettingsScreen() {
         const p = await fetchProfile(user.id);
         if (!p || cancelled) return;
         setAuth(p.role, p);
+        
+        // Refresh customer info to get latest subscription status
+        if (isProviderSession(p.role, p)) {
+          const Purchases = (await import('react-native-purchases')).default;
+          try {
+            const info = await Purchases.getCustomerInfo();
+            useOfferingsStore.getState().setCustomerInfo(info);
+          } catch (error) {
+            // Silently fail - will show basic badge if customer info unavailable
+          }
+        }
       })();
       return () => {
         cancelled = true;
@@ -225,7 +258,7 @@ export default function SettingsScreen() {
           avatarLetter={getAvatarLetter(profile)}
           avatarSource={settingsAvatarUri ? { uri: settingsAvatarUri } : undefined}
           onEditPress={handleEditProfile}
-          showPremium={isProvider}
+          badgeType={badgeType}
         />
 
         <View style={styles.sectionWrapper}>

@@ -96,12 +96,11 @@ export default function PostFoodScreen() {
   const [showFoodTypeOptions, setShowFoodTypeOptions] = useState(false);
   const [showQuantityUnitOptions, setShowQuantityUnitOptions] = useState(false);
   const [previousRepostLoading, setPreviousRepostLoading] = useState(false);
-  const [hasPriorListing, setHasPriorListing] = useState(false);
 
   const addListingFromApi = useProviderListingsStore((s) => s.addListingFromApi);
+  const hasPriorListing = useProviderListingsStore((s) => s.hasPriorListing);
   const customerInfo = useOfferingsStore((s) => s.customerInfo);
 
-  // Check monthly post limit when screen loads (only for new posts, not edits)
   useFocusEffect(
     useCallback(() => {
       if (editListing) return; // Skip check for edits
@@ -161,31 +160,6 @@ export default function PostFoodScreen() {
     }
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      let cancelled = false;
-      if (editListing) {
-        setHasPriorListing(false);
-        return () => {
-          cancelled = true;
-        };
-      }
-      (async () => {
-        const { listings, error } = await fetchListingsApi();
-        if (cancelled) return;
-        if (error) {
-          setHasPriorListing(false);
-          return;
-        }
-        const usable = listings.filter((l) => l.status !== 'cancelled');
-        setHasPriorListing(usable.length >= 1);
-      })();
-      return () => {
-        cancelled = true;
-      };
-    }, [editListing])
-  );
-
   const handleOneTapRepostFromPrevious = async () => {
     if (editListing || previousRepostLoading || !hasPriorListing) return;
     setPreviousRepostLoading(true);
@@ -218,13 +192,6 @@ export default function PostFoodScreen() {
         Alert.alert('Cannot re-post', 'That listing is missing a pickup address.');
         return;
       }
-      if (!source.imageUrl?.trim()) {
-        Alert.alert(
-          'Cannot re-post',
-          'That listing has no image URL. Use the form below to post manually.'
-        );
-        return;
-      }
 
       const repostQty =
         (source.totalQuantity?.trim() || source.quantity || '').trim() || source.quantity;
@@ -237,7 +204,7 @@ export default function PostFoodScreen() {
         quantityUnit: source.quantityUnit,
         dietaryTags: source.dietaryTags ?? [],
         allergens: source.allergens ?? [],
-        imageUrl: source.imageUrl,
+        imageUrl: source.imageUrl ?? undefined,
         pickupAddress: source.pickupAddress,
         startTime: source.startTime,
         endTime: source.endTime,

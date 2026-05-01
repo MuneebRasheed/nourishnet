@@ -12,14 +12,20 @@ import {
 } from '@expo-google-fonts/poppins';
 import { useFonts } from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
+import * as SplashScreen from 'expo-splash-screen';
 import { useThemeStore } from './store/themeStore';
 import { getColors } from './utils/colors';
 import RootNavigation from './src/navigations/RootNavigation';
 import PushNotificationSetup from './src/components/PushNotificationSetup';
 import RevenueCatInit from './src/components/RevenueCatInit';
+
+// Prevent the splash screen from auto-hiding
+SplashScreen.preventAutoHideAsync().catch(() => {
+  // In case splash screen is already hidden or not available
+});
 const fontMap = {
   Poppins_400Regular,
   Poppins_500Medium,
@@ -36,6 +42,15 @@ export default function App() {
   const theme = useThemeStore((state) => state.theme);
   const isDark = theme === 'dark';
   const colors = getColors(isDark);
+
+  useEffect(() => {
+    if (fontsLoaded || fontError) {
+      // Hide the splash screen once fonts are loaded
+      SplashScreen.hideAsync().catch(() => {
+        // Splash screen might already be hidden
+      });
+    }
+  }, [fontsLoaded, fontError]);
 
   if (!fontsLoaded && !fontError) {
     return null;

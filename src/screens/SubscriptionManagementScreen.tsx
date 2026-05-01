@@ -171,11 +171,7 @@ export default function SubscriptionManagementScreen() {
   };
 
   const openManageSubscriptions = () => {
-    if (Platform.OS === 'ios') {
-      void Linking.openURL('https://apps.apple.com/account/subscriptions');
-    } else {
-      void Linking.openURL('https://play.google.com/store/account/subscriptions');
-    }
+    void Linking.openURL('https://apps.apple.com/account/subscriptions');
   };
 
   const basicIsCurrent = tier === 'basic';
@@ -294,7 +290,7 @@ export default function SubscriptionManagementScreen() {
                 },
               ]}
             >
-              {Platform.OS === 'ios' ? 'Manage via App Store' : 'Manage via Play Store'}
+              Manage Subscription
             </Text>
           </Pressable>
         </View>
@@ -308,9 +304,51 @@ export default function SubscriptionManagementScreen() {
             },
           ]}
         >
-          Subscriptions renew automatically unless canceled in your App Store or Google Play
+          Subscriptions renew automatically unless canceled in your App Store
           subscription settings at least 24 hours before the end of the current period.
         </Text>
+        
+        <View style={styles.legalLinks}>
+          <Pressable onPress={() => navigation.navigate('PrivacyPolicyScreen')}>
+            <Text
+              style={[
+                styles.legalLink,
+                {
+                  color: palette.restorePurchasesColor,
+                  fontFamily: fontFamilies.interMedium,
+                  fontSize: fontSizes.subhead,
+                },
+              ]}
+            >
+              Privacy Policy
+            </Text>
+          </Pressable>
+          <Text
+            style={[
+              styles.legalSeparator,
+              {
+                color: colors.textSecondary,
+                fontSize: fontSizes.subhead,
+              },
+            ]}
+          >
+            {' • '}
+          </Text>
+          <Pressable onPress={() => navigation.navigate('TermsAndConditionsScreen')}>
+            <Text
+              style={[
+                styles.legalLink,
+                {
+                  color: palette.restorePurchasesColor,
+                  fontFamily: fontFamilies.interMedium,
+                  fontSize: fontSizes.subhead,
+                },
+              ]}
+            >
+              Terms of Use
+            </Text>
+          </Pressable>
+        </View>
       </ScrollView>
     </View>
   );
@@ -342,8 +380,21 @@ const styles = StyleSheet.create({
   disclaimer: {
     textAlign: 'center',
     lineHeight: 20,
+    marginBottom: 16,
   },
   footerManageLink: {
     paddingHorizontal: 20,
+  },
+  legalLinks: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  legalLink: {
+    textDecorationLine: 'underline',
+  },
+  legalSeparator: {
+    marginHorizontal: 4,
   },
 });

@@ -53,6 +53,7 @@ export default function ProviderHomeScreen() {
   const setListings = useProviderListingsStore((s) => s.setListings);
   const removeListing = useProviderListingsStore((s) => s.removeListing);
   const addListingFromApi = useProviderListingsStore((s) => s.addListingFromApi);
+  const setHasPriorListing = useProviderListingsStore((s) => s.setHasPriorListing);
   const cachedStreakText = useProviderImpactStore((s) => s.streakText);
   const cachedMealsRescuedTotal = useProviderImpactStore((s) => s.mealsRescuedTotal);
   const setImpactCache = useProviderImpactStore((s) => s.setImpact);
@@ -79,7 +80,12 @@ export default function ProviderHomeScreen() {
       fetchProviderListingsWithZeroQuantityResolved(),
       analyticsPromise,
     ]);
-    if (!listingsRes.error) setListings(listingsRes.listings);
+    if (!listingsRes.error) {
+      setListings(listingsRes.listings);
+      // Check if at least 1 non-cancelled listing exists for repost button
+      const usable = listingsRes.listings.filter((l) => l.status !== 'cancelled');
+      setHasPriorListing(usable.length >= 1);
+    }
 
     if (userRole === 'provider' || userRole === 'recipient') {
       if (analyticsRes.summary) {
@@ -97,11 +103,12 @@ export default function ProviderHomeScreen() {
     // Load monthly post count for free plan users
     if (profile?.id && subscriptionTier === 'free') {
       const { count } = await getMonthlyPostCount(profile.id);
+      console.log('Monthly post count:', count, 'Limit:', monthlyPostLimit);
       setMonthlyPostCount(count);
     } else {
       setMonthlyPostCount(null);
     }
-  }, [setListings, userRole, setImpactCache, cachedStreakText, cachedMealsRescuedTotal, profile?.id, subscriptionTier]);
+  }, [setListings, setHasPriorListing, userRole, setImpactCache, cachedStreakText, cachedMealsRescuedTotal, profile?.id, subscriptionTier]);
 
   useFocusEffect(
     useCallback(() => {
@@ -307,7 +314,9 @@ export default function ProviderHomeScreen() {
                 </Text>
                 <Text style={[styles.postLimitLabel, { color: colors.textSecondary, fontFamily: fontFamilies.inter, fontSize: fonts.caption }]}>
                   {monthlyPostCount >= monthlyPostLimit 
-                    ? 'All posts used this month' 
+                    ? (monthlyPostCount > monthlyPostLimit 
+                        ? `${monthlyPostCount - monthlyPostLimit} over limit - resets next month`
+                        : 'All posts used this month')
                     : `${monthlyPostLimit - monthlyPostCount} post${monthlyPostLimit - monthlyPostCount !== 1 ? 's' : ''} remaining`
                   }
                 </Text>
@@ -325,6 +334,8 @@ export default function ProviderHomeScreen() {
                   ]} 
                 />
               </View>
+              {/* Debug info - remove after testing */}
+              {__DEV__ && console.log('Progress bar width:', `${Math.min((monthlyPostCount / monthlyPostLimit) * 100, 100)}%`, 'Count:', monthlyPostCount, 'Limit:', monthlyPostLimit)}
             </View>
           )}
 

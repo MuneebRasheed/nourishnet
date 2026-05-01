@@ -39,20 +39,25 @@ export function getMonthlyPostLimit(tier: 'free' | 'plus' | 'pro'): number {
 
 /**
  * Counts how many posts the user has created in the current month
+ * This count does NOT decrement when posts are deleted - it tracks creation events
+ * 
+ * IMPORTANT: Uses the monthly_post_tracking table which persists records even after
+ * listings are deleted. This prevents users from gaming the system by creating and
+ * deleting posts repeatedly.
  */
 export async function getMonthlyPostCount(userId: string): Promise<{ count: number; error?: string }> {
   try {
-    // Get the start of the current month
+    // Get current year-month in 'YYYY-MM' format
     const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const startOfMonthISO = startOfMonth.toISOString();
+    const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
-    // Count listings created this month by this user
+    // Count posts created this month using the tracking table
+    // This table persists records even after listings are deleted
     const { count, error } = await supabase
-      .from('listings')
+      .from('monthly_post_tracking')
       .select('*', { count: 'exact', head: true })
       .eq('provider_id', userId)
-      .gte('created_at', startOfMonthISO);
+      .eq('year_month', yearMonth);
 
     if (error) {
       return { count: 0, error: error.message };
