@@ -13,9 +13,21 @@ app.use(express.json());
 app.use('/auth', authRoutes);
 app.use('/listings', listingsRoutes);
 
-// Health check
+const getHealthPayload = () => ({
+  ok: true,
+  status: 'healthy',
+  service: 'NourishNet API',
+  uptimeSeconds: Math.floor(process.uptime()),
+  timestamp: new Date().toISOString(),
+});
+
+// Public health checks (no auth)
 app.get('/health', (req, res) => {
-  res.json({ ok: true, message: 'NourishNet API is running' });
+  res.json(getHealthPayload());
+});
+
+app.get('/public/health', (req, res) => {
+  res.json(getHealthPayload());
 });
 
 // API root
@@ -25,6 +37,7 @@ app.get('/api', (req, res) => {
     version: '1.0.0',
     endpoints: [
       '/health',
+      '/public/health',
       '/api',
       '/auth/start-signup',
       '/auth/send-signup-otp',
