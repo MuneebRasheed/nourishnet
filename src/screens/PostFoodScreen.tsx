@@ -334,10 +334,6 @@ export default function PostFoodScreen() {
       Alert.alert('Missing required field', 'Please enter a food title.');
       return;
     }
-    if (!foodImageUri) {
-      Alert.alert('Missing required field', 'Please add a food image.');
-      return;
-    }
 
     const draft: PostFoodDraft = {
       foodType,
@@ -578,7 +574,7 @@ export default function PostFoodScreen() {
 
         <View style={styles.fieldGroup}>
           <Text style={[styles.label, { color: colors.text, fontFamily: fontFamilies.interMedium, fontSize: fonts.subhead }]}>
-            Food Image*
+            Food Image
           </Text>
           <TouchableOpacity
             style={[styles.imagePickerButton, { backgroundColor: colors.inputFieldBg, borderColor: colors.borderColor }]}

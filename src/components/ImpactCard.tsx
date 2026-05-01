@@ -12,6 +12,7 @@ export type ImpactStatCardProps = {
   value: string;
   label: string;
   accentColor: string;
+  isDateValue?: boolean; // New prop to indicate if value is a date string
 };
 
 export type ImpactMilestoneCardProps = {
@@ -33,7 +34,7 @@ export default function ImpactCard(props: ImpactCardProps) {
   const cardBg = isDark ? colors.surface : palette.white;
 
   if (props.variant === 'stat') {
-    const { icon, title, value, label, accentColor } = props;
+    const { icon, title, value, label, accentColor, isDateValue } = props;
     return (
       <View style={[styles.statCard, { backgroundColor:colors.inputFieldBg, borderColor: colors.borderColor }]}>
         <View style={styles.statHeaderRow}>
@@ -42,7 +43,14 @@ export default function ImpactCard(props: ImpactCardProps) {
             {title}
           </Text>
         </View>
-        <Text style={[styles.statValue, { color: colors.text, fontFamily: fontFamilies.interBold, fontSize: fonts.largeTitle }]}>
+        <Text style={[
+          styles.statValue, 
+          { 
+            color: colors.text, 
+            fontFamily: fontFamilies.interBold, 
+            fontSize: isDateValue ? fonts.body : fonts.largeTitle 
+          }
+        ]}>
           {value}
         </Text>
         <Text style={[styles.statLabel, { color: colors.textSecondary, fontFamily: fontFamilies.inter, fontSize: fonts.caption }]}>

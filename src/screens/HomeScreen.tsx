@@ -1,11 +1,12 @@
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
-import { StyleSheet, Text, View, ScrollView, RefreshControl, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, RefreshControl, ActivityIndicator, Alert, Linking } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import { useRequestedListingsStore } from '../../store/requestedListingsStore';
+import { useSettingsStore } from '../../store/settingStore';
 import { getColors, palette } from '../../utils/colors';
 import { useAppFontSizes } from '../../theme/fonts';
 import { fontFamilies } from '../../theme/typography';
@@ -28,6 +29,7 @@ import FilterModal, {
 import CategoryChips from '../components/CategoryChips';
 import FoodCard, { FoodCardData } from '../components/FoodCard';
 import BoxIcon from '../assets/svgs/BoxIcon';
+import NotificationBanner from '../components/NotificationBanner';
 import type { FoodDetailItem } from './FoodDetailScreen';
 import { getAvatarLetter, getDisplayName, avatarUriWithCacheBust } from '../lib/profile';
 import { fetchStreakTextApi } from '../lib/api/analytics';
@@ -179,6 +181,7 @@ export default function HomeScreen() {
   const mergeBrowseListingsCache = useRecipientFeedStore((s) => s.mergeBrowseListings);
   const setRecipientCompletedIdsCache = useRecipientFeedStore((s) => s.setRecipientCompletedListingIds);
   const notificationUnreadCount = useNotificationInboxStore((s) => s.unreadCount);
+  const notificationsEnabled = useSettingsStore((s) => s.notificationsEnabled);
   const homeHeaderAvatarUri = avatarUriWithCacheBust(profile?.avatar_url, profile?.updated_at);
   const [browseListings, setBrowseListings] = useState<ProviderListing[]>(cachedBrowseListings);
   /** Listing ids the current user already finished (same bucket as My Requests → Completed). Hidden from this recipient’s home feed. */
@@ -405,6 +408,25 @@ export default function HomeScreen() {
     setRefreshing(false);
   };
 
+  const handleEnableNotifications = () => {
+    Alert.alert(
+      'Enable Notifications',
+      "Get instant alerts when food is posted near you. You can manage notification settings anytime.",
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Go to Settings',
+          onPress: () => {
+            navigation.navigate('NotificationSettingsScreen');
+          },
+        },
+      ]
+    );
+  };
+
   const ACTIVE_LISTING_STATUSES = useMemo(
     () => new Set<ProviderListing['status']>(['active', 'request_open', 'claimed']),
     []
@@ -559,6 +581,11 @@ export default function HomeScreen() {
             onFilterPress={() => setFilterModalVisible(true)}
           />
         </View>
+        {!notificationsEnabled && (
+          <View style={styles.notificationBannerSection}>
+            <NotificationBanner onEnable={handleEnableNotifications} />
+          </View>
+        )}
         <View style={styles.categoriesSection}>
           <CategoryChips selected={category} onSelect={setCategory} />
         </View>
@@ -615,7 +642,7 @@ export default function HomeScreen() {
                       },
                     ]}
                   >
-                    No active food listings found
+                    We're just getting started in your area
                   </Text>
                   <Text
                     style={[
@@ -625,10 +652,11 @@ export default function HomeScreen() {
                         fontFamily: fontFamilies.inter,
                         fontSize: fonts.caption,
                         marginTop: 4,
+                        textAlign: 'center',
                       },
                     ]}
                   >
-                    Create a new listing to start sharing food.
+                    We’ll notify you as soon as something is posted near you!
                   </Text>
                 </View>
               </View>
@@ -703,6 +731,9 @@ const styles = StyleSheet.create({
   searchSection: {
     marginTop: 20,
   },
+  notificationBannerSection: {
+    marginTop: 16,
+  },
   categoriesSection: {
     marginTop: 20,
     marginHorizontal: -16,
@@ -747,6 +778,7 @@ const styles = StyleSheet.create({
   },
   emptyStateTitle: {
     marginTop: 16,
+    textAlign: 'center',
   },
   emptyStateSubtitle: {
     marginTop: 8,

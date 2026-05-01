@@ -12,6 +12,11 @@ export type AnalyticsSummary = {
   monthRatios: number[];
   firstPickupAt: string | null;
   firstEcoWarriorAt: string | null;
+  // Recipient-specific metrics
+  lastPickupDate: string | null;
+  pickupSuccessRate: number;
+  totalRequests: number;
+  acceptedRequests: number;
 };
 
 type ImpactEventRow = {
@@ -114,6 +119,31 @@ export async function fetchAnalyticsSummaryApi(role: ImpactRole): Promise<{
         })?.created_at ?? null
       : null;
 
+  // Recipient-specific metrics
+  let lastPickupDate: string | null = null;
+  let pickupSuccessRate = 0;
+  let totalRequests = 0;
+  let acceptedRequests = 0;
+
+  if (role === 'recipient') {
+    // Get last pickup date from impact events
+    if (events.length > 0) {
+      lastPickupDate = events[events.length - 1].created_at;
+    }
+
+    // Get pickup success rate (accepted requests / total requests)
+    const { data: requestsData } = await supabase
+      .from('listing_requests')
+      .select('status')
+      .eq('recipient_id', userId);
+
+    if (requestsData) {
+      totalRequests = requestsData.length;
+      acceptedRequests = requestsData.filter((r) => r.status === 'won').length;
+      pickupSuccessRate = totalRequests > 0 ? Math.round((acceptedRequests / totalRequests) * 100) : 0;
+    }
+  }
+
   return {
     summary: {
       meals,
@@ -125,6 +155,10 @@ export async function fetchAnalyticsSummaryApi(role: ImpactRole): Promise<{
       monthRatios,
       firstPickupAt,
       firstEcoWarriorAt,
+      lastPickupDate,
+      pickupSuccessRate,
+      totalRequests,
+      acceptedRequests,
     },
   };
 }

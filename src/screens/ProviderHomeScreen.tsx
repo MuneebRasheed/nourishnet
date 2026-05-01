@@ -245,36 +245,6 @@ export default function ProviderHomeScreen() {
           iconPosition="left"
           style={styles.primaryCta}
         />
-        
-        {/* Monthly post limit indicator for free plan */}
-        {subscriptionTier === 'free' && monthlyPostCount !== null && (
-          <View style={[styles.postLimitBanner, { backgroundColor: isDark ? colors.inputFieldBg : palette.notificationFreshBg }]}>
-            <View style={styles.postLimitContent}>
-              <Ionicons 
-                name="information-circle-outline" 
-                size={20} 
-                color={monthlyPostCount >= monthlyPostLimit ? palette.errorRed : colors.primary} 
-              />
-              <Text style={[styles.postLimitText, { color: colors.text, fontFamily: fontFamilies.inter, fontSize: fonts.caption }]}>
-                {monthlyPostCount >= monthlyPostLimit ? (
-                  <>You've used all {monthlyPostLimit} posts this month</>
-                ) : (
-                  <>{monthlyPostCount}/{monthlyPostLimit} posts used this month</>
-                )}
-              </Text>
-            </View>
-            {monthlyPostCount >= monthlyPostLimit && (
-              <TouchableOpacity 
-                onPress={() => navigation.navigate('SubscriptionManagementScreen')}
-                style={styles.upgradeLinkButton}
-              >
-                <Text style={[styles.upgradeLinkText, { color: colors.primary, fontFamily: fontFamilies.interMedium, fontSize: fonts.caption }]}>
-                  Upgrade to Pro
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
       </View>
       <ScrollView
         style={styles.scroll}
@@ -302,6 +272,62 @@ export default function ProviderHomeScreen() {
         }
       >
         <View style={styles.content}>
+          {/* Monthly post limit indicator for free plan */}
+          {subscriptionTier === 'free' && monthlyPostCount !== null && (
+            <View style={[styles.postLimitBanner, { backgroundColor: isDark ? colors.inputFieldBg : palette.notificationFreshBg }]}>
+              <View style={styles.postLimitHeader}>
+                <View style={styles.postLimitTitleRow}>
+                  <Ionicons 
+                    name="information-circle-outline" 
+                    size={20} 
+                    color={monthlyPostCount >= monthlyPostLimit ? palette.errorRed : colors.primary} 
+                  />
+                  <Text style={[styles.postLimitTitle, { color: colors.text, fontFamily: fontFamilies.interSemiBold, fontSize: fonts.caption }]}>
+                    Monthly Posts
+                  </Text>
+                </View>
+                {monthlyPostCount >= monthlyPostLimit && (
+                  <TouchableOpacity 
+                    onPress={() => navigation.navigate('SubscriptionManagementScreen')}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Text style={[styles.upgradeLinkText, { color: colors.primary, fontFamily: fontFamilies.interSemiBold, fontSize: fonts.caption }]}>
+                      Upgrade
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              
+              <View style={styles.postLimitStats}>
+                <Text style={[styles.postLimitCount, { color: colors.text, fontFamily: fontFamilies.interBold, fontSize: fonts.title3 }]}>
+                  {monthlyPostCount}
+                  <Text style={[styles.postLimitTotal, { color: colors.textSecondary, fontFamily: fontFamilies.interMedium, fontSize: fonts.body }]}>
+                    /{monthlyPostLimit}
+                  </Text>
+                </Text>
+                <Text style={[styles.postLimitLabel, { color: colors.textSecondary, fontFamily: fontFamilies.inter, fontSize: fonts.caption }]}>
+                  {monthlyPostCount >= monthlyPostLimit 
+                    ? 'All posts used this month' 
+                    : `${monthlyPostLimit - monthlyPostCount} post${monthlyPostLimit - monthlyPostCount !== 1 ? 's' : ''} remaining`
+                  }
+                </Text>
+              </View>
+
+              {/* Progress bar */}
+              <View style={[styles.progressBarContainer, { backgroundColor: isDark ? colors.background : palette.white }]}>
+                <View 
+                  style={[
+                    styles.progressBarFill, 
+                    { 
+                      backgroundColor: monthlyPostCount >= monthlyPostLimit ? palette.errorRed : colors.primary,
+                      width: `${Math.min((monthlyPostCount / monthlyPostLimit) * 100, 100)}%`
+                    }
+                  ]} 
+                />
+              </View>
+            </View>
+          )}
+
           <Text
             style={[
               styles.sectionTitle,
@@ -530,4 +556,44 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   seeAllLink: {},
+  postLimitBanner: {
+    marginTop: 20,
+    marginBottom: 4,
+    padding: 16,
+    borderRadius: 12,
+  },
+  postLimitHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  postLimitTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  postLimitTitle: {},
+  postLimitStats: {
+    marginBottom: 12,
+  },
+  postLimitCount: {
+    lineHeight: 28,
+  },
+  postLimitTotal: {
+    lineHeight: 28,
+  },
+  postLimitLabel: {
+    marginTop: 2,
+  },
+  progressBarContainer: {
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  upgradeLinkText: {},
 });

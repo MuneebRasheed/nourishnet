@@ -57,6 +57,10 @@ function toSnapshotFromApi(summary: Awaited<ReturnType<typeof fetchAnalyticsSumm
     monthRatios: summary.monthRatios.length ? summary.monthRatios : DEFAULT_ANALYTICS_CACHE.monthRatios,
     firstPickupAgo: formatTimeAgo(summary.firstPickupAt),
     ecoWarriorAgo: formatTimeAgo(summary.firstEcoWarriorAt),
+    lastPickupDate: summary.lastPickupDate,
+    pickupSuccessRate: summary.pickupSuccessRate,
+    totalRequests: summary.totalRequests,
+    acceptedRequests: summary.acceptedRequests,
   };
 }
 
@@ -81,6 +85,8 @@ export default function AnalyticsScreen() {
   );
   const [firstPickupAgo, setFirstPickupAgo] = useState(initialSnapshot.firstPickupAgo);
   const [ecoWarriorAgo, setEcoWarriorAgo] = useState(initialSnapshot.ecoWarriorAgo);
+  const [lastPickupDate, setLastPickupDate] = useState(initialSnapshot.lastPickupDate);
+  const [pickupSuccessRate, setPickupSuccessRate] = useState(initialSnapshot.pickupSuccessRate);
 
   const applySnapshot = (snapshot: AnalyticsSummaryCache) => {
     setMeals(snapshot.meals);
@@ -91,6 +97,8 @@ export default function AnalyticsScreen() {
     setMonthCounts(snapshot.monthCounts ?? snapshot.monthRatios);
     setFirstPickupAgo(snapshot.firstPickupAgo);
     setEcoWarriorAgo(snapshot.ecoWarriorAgo);
+    setLastPickupDate(snapshot.lastPickupDate);
+    setPickupSuccessRate(snapshot.pickupSuccessRate);
   };
 
   useEffect(() => {
@@ -137,24 +145,40 @@ export default function AnalyticsScreen() {
     [userRole]
   );
 
+  const formatLastPickupDate = (dateStr: string | null): string => {
+    if (!dateStr) return 'No pickups yet';
+    return formatTimeAgo(dateStr);
+  };
+
   const milestones = useMemo(
-    () => [
-      {
-        id: 'first-rescue',
-        title: 'First Rescue',
-        description: userRole === 'provider' ? 'You shared your first meal!' : 'You claimed your first meal!',
-        timeAgo: firstPickupAgo,
-      },
-      {
-        id: 'eco-warrior',
-        title: 'Eco Warrior',
-        description:
-          userRole === 'provider'
-            ? 'You shared enough meals to save 10 kg of CO2!'
-            : 'You saved 10 kg of CO2!',
-        timeAgo: ecoWarriorAgo,
-      },
-    ],
+    () => {
+      if (userRole === 'recipient') {
+        // Only show "First Meal" for recipients
+        return [
+          {
+            id: 'first-meal',
+            title: 'First Meal',
+            description: 'Claimed your first meal',
+            timeAgo: firstPickupAgo,
+          },
+        ];
+      }
+      // Provider milestones
+      return [
+        {
+          id: 'first-rescue',
+          title: 'First Rescue',
+          description: 'You shared your first meal!',
+          timeAgo: firstPickupAgo,
+        },
+        {
+          id: 'eco-warrior',
+          title: 'Eco Warrior',
+          description: 'You shared enough meals to save 10 kg of CO2!',
+          timeAgo: ecoWarriorAgo,
+        },
+      ];
+    },
     [ecoWarriorAgo, firstPickupAgo, userRole]
   );
   const maxMonthlyMeals = useMemo(() => Math.max(0, ...monthCounts), [monthCounts]);
@@ -204,113 +228,106 @@ export default function AnalyticsScreen() {
         <View style={styles.section}>
        
           <View style={styles.statsGrid}>
-            <ImpactCard
-              variant="stat"
-              icon={<HeartTab width={20} height={20} color={palette.timeIcon} />}
-              title={statLabels.mealsTitle}
-              value={String(meals)}
-              label={statLabels.mealsLabel}
-              accentColor={palette.timeIcon}
-            />
-            <ImpactCard
-              variant="stat"
-              icon={<LeafIcon1 width={20} height={20} color={palette.roleBulbColor2} />}
-              title="Weight"
-              value={String(poundsRescued)}
-              label="Pounds rescued"
-              accentColor={palette.roleBulbColor2}
-            />
-            <ImpactCard
-              variant="stat"
-              icon={<UpwardArrow width={20} height={20} color={palette.logoutColor} />}
-              title=" CO2"
-              value={String(co2LbsSaved)}
-              label="Lbs CO2 saved"
-              accentColor={palette.logoutColor}
-            />
-            <ImpactCard
-              variant="stat"
-              icon={<BatchIcon width={20} height={20} color={palette.roleBulbColor3} />}
-              title="Streak"
-              value={String(streakDays)}
-              label="Day Streak"
-              accentColor={palette.roleBulbColor3}
-            />
+            {userRole === 'recipient' ? (
+              <>
+                {/* Recipient-specific metrics */}
+                <ImpactCard
+                  variant="stat"
+                  icon={<HeartTab width={20} height={20} color={palette.timeIcon} />}
+                  title="Total Meals"
+                  value={String(meals)}
+                  label="Meals received"
+                  accentColor={palette.timeIcon}
+                />
+                <ImpactCard
+                  variant="stat"
+                  icon={<ArrowCurve width={20} height={20} color={palette.roleBulbColor2} />}
+                  title="Last Pickup"
+                  value={formatLastPickupDate(lastPickupDate)}
+                  label="Most recent"
+                  accentColor={palette.roleBulbColor2}
+                  isDateValue={true}
+                />
+                <ImpactCard
+                  variant="stat"
+                  icon={<UpwardArrow width={20} height={20} color={palette.logoutColor} />}
+                  title="Success Rate"
+                  value={`${pickupSuccessRate}%`}
+                  label="Requests accepted"
+                  accentColor={palette.logoutColor}
+                />
+                <ImpactCard
+                  variant="stat"
+                  icon={<BatchIcon width={20} height={20} color={palette.roleBulbColor3} />}
+                  title="Streak"
+                  value={String(streakDays)}
+                  label="Day Streak"
+                  accentColor={palette.roleBulbColor3}
+                />
+              </>
+            ) : (
+              <>
+                {/* Provider metrics */}
+                <ImpactCard
+                  variant="stat"
+                  icon={<HeartTab width={20} height={20} color={palette.timeIcon} />}
+                  title={statLabels.mealsTitle}
+                  value={String(meals)}
+                  label={statLabels.mealsLabel}
+                  accentColor={palette.timeIcon}
+                />
+                <ImpactCard
+                  variant="stat"
+                  icon={<LeafIcon1 width={20} height={20} color={palette.roleBulbColor2} />}
+                  title="Weight"
+                  value={String(poundsRescued)}
+                  label="Pounds rescued"
+                  accentColor={palette.roleBulbColor2}
+                />
+                <ImpactCard
+                  variant="stat"
+                  icon={<UpwardArrow width={20} height={20} color={palette.logoutColor} />}
+                  title=" CO2"
+                  value={String(co2LbsSaved)}
+                  label="Lbs CO2 saved"
+                  accentColor={palette.logoutColor}
+                />
+                <ImpactCard
+                  variant="stat"
+                  icon={<BatchIcon width={20} height={20} color={palette.roleBulbColor3} />}
+                  title="Streak"
+                  value={String(streakDays)}
+                  label="Day Streak"
+                  accentColor={palette.roleBulbColor3}
+                />
+              </>
+            )}
           </View>
         </View>
 
-        <View style={styles.section}>
-          <Text
-            style={[
-              styles.sectionTitle,
-              {
-                color: colors.text,
-                fontFamily: fontFamilies.poppinsSemiBold,
-                fontSize: fonts.subhead,
-              },
-            ]}
-          >
-            Monthly Activity
-          </Text>
-          <View style={[styles.chartCard, { backgroundColor: colors.inputFieldBg }]}>
-            {hasMonthlyActivity ? (
-              <View style={styles.chartBody}>
-                <View style={styles.yAxis}>
-                  {yAxisTicks.map((tick) => (
-                    <Text
-                      key={`tick-${tick.value}-${tick.ratio}`}
-                      style={[
-                        styles.yAxisLabel,
-                        {
-                          color: colors.textSecondary,
-                          fontFamily: fontFamilies.inter,
-                          fontSize: fonts.caption,
-                        },
-                      ]}
-                    >
-                      {tick.value}
-                    </Text>
-                  ))}
-                </View>
-                <View style={styles.chartContent}>
-                  <View style={styles.chartArea}>
-                    <View style={styles.gridLayer} pointerEvents="none">
-                      {yAxisTicks.map((tick, index) => (
-                        <View
-                          key={`grid-${tick.value}-${tick.ratio}`}
-                          style={[
-                            styles.gridLine,
-                            {
-                              top: `${(1 - tick.ratio) * 100}%`,
-                              opacity: index === yAxisTicks.length - 1 ? 0.35 : 0.2,
-                              backgroundColor: colors.borderColor,
-                            },
-                          ]}
-                        />
-                      ))}
-                    </View>
-                    <View style={styles.barChart}>
-                      {monthCounts.map((count, i) => (
-                        <View key={months[i] ?? `m-${i}`} style={styles.barWrapper}>
-                          <View
-                            style={[
-                              styles.bar,
-                              {
-                                height: count > 0 ? Math.max(10, (CHART_HEIGHT * count) / yAxisMax) : 0,
-                                backgroundColor: '#FF6B35',
-                              },
-                            ]}
-                          />
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                  <View style={styles.barLabels}>
-                    {months.map((label) => (
+        {userRole === 'provider' && (
+          <View style={styles.section}>
+            <Text
+              style={[
+                styles.sectionTitle,
+                {
+                  color: colors.text,
+                  fontFamily: fontFamilies.poppinsSemiBold,
+                  fontSize: fonts.subhead,
+                },
+              ]}
+            >
+              Monthly Activity
+            </Text>
+            <View style={[styles.chartCard, { backgroundColor: colors.inputFieldBg }]}>
+              {hasMonthlyActivity ? (
+                <View style={styles.chartBody}>
+                  <View style={styles.yAxis}>
+                    {yAxisTicks.map((tick) => (
                       <Text
-                        key={label}
+                        key={`tick-${tick.value}-${tick.ratio}`}
                         style={[
-                          styles.barLabel,
+                          styles.yAxisLabel,
                           {
                             color: colors.textSecondary,
                             fontFamily: fontFamilies.inter,
@@ -318,30 +335,81 @@ export default function AnalyticsScreen() {
                           },
                         ]}
                       >
-                        {label}
+                        {tick.value}
                       </Text>
                     ))}
                   </View>
+                  <View style={styles.chartContent}>
+                    <View style={styles.chartArea}>
+                      <View style={styles.gridLayer} pointerEvents="none">
+                        {yAxisTicks.map((tick, index) => (
+                          <View
+                            key={`grid-${tick.value}-${tick.ratio}`}
+                            style={[
+                              styles.gridLine,
+                              {
+                                top: `${(1 - tick.ratio) * 100}%`,
+                                opacity: index === yAxisTicks.length - 1 ? 0.35 : 0.2,
+                                backgroundColor: colors.borderColor,
+                              },
+                            ]}
+                          />
+                        ))}
+                      </View>
+                      <View style={styles.barChart}>
+                        {monthCounts.map((count, i) => (
+                          <View key={months[i] ?? `m-${i}`} style={styles.barWrapper}>
+                            <View
+                              style={[
+                                styles.bar,
+                                {
+                                  height: count > 0 ? Math.max(10, (CHART_HEIGHT * count) / yAxisMax) : 0,
+                                  backgroundColor: '#FF6B35',
+                                },
+                              ]}
+                            />
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                    <View style={styles.barLabels}>
+                      {months.map((label) => (
+                        <Text
+                          key={label}
+                          style={[
+                            styles.barLabel,
+                            {
+                              color: colors.textSecondary,
+                              fontFamily: fontFamilies.inter,
+                              fontSize: fonts.caption,
+                            },
+                          ]}
+                        >
+                          {label}
+                        </Text>
+                      ))}
+                    </View>
+                  </View>
                 </View>
-              </View>
-            ) : (
-              <View style={styles.noActivityContainer}>
-                <Text
-                  style={[
-                    styles.noActivityText,
-                    {
-                      color: colors.textSecondary,
-                      fontFamily: fontFamilies.poppinsSemiBold,
-                      fontSize: fonts.body,
-                    },
-                  ]}
-                >
-                  No Monthly Activity
-                </Text>
-              </View>
-            )}
+              ) : (
+                <View style={styles.noActivityContainer}>
+                  <Text
+                    style={[
+                      styles.noActivityText,
+                      {
+                        color: colors.textSecondary,
+                        fontFamily: fontFamilies.poppinsSemiBold,
+                        fontSize: fonts.body,
+                      },
+                    ]}
+                  >
+                    No Monthly Activity
+                  </Text>
+                </View>
+              )}
+            </View>
           </View>
-        </View>
+        )}
 
         <View style={styles.section}>
           <Text

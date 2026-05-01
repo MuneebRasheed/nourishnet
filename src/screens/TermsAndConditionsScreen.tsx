@@ -38,7 +38,7 @@ export default function TermsAndConditionsScreen() {
       ]}
     >
       <SettingsHeader
-        title="Terms & conditions"
+        title="Terms of Use"
         onLeftPress={handleBack}
         leftIcon={<ChevronLeft width={24} height={24} color={colors.text} />}
         contentPaddingHorizontal={16}
@@ -52,35 +52,57 @@ export default function TermsAndConditionsScreen() {
           Last updated: October 21, 2025
         </Text>
         <Text style={body}>
-          This Privacy Policy describes how we collect, use, and handle your information when you use our services.
+          Welcome to NourishNet. By using our app, you agree to these Terms of Use. Please read them carefully.
         </Text>
 
-        <Text style={sectionTitle}>Information Collection</Text>
-        <Text style={body}>We collect several types of information for various purposes:</Text>
-        <Text style={bullet}>• Personal Information (email address, name)</Text>
-        <Text style={bullet}>• Usage Data (app features accessed, time spent)</Text>
-        <Text style={bullet}>• Device Information (IP address, browser type)</Text>
-        <Text style={bullet}>• Cookies and Tracking Data</Text>
-
-        <Text style={sectionTitle}>How We Use Your Information</Text>
-        <Text style={body}>We use the collected information for:</Text>
-        <Text style={bullet}>• Providing and maintaining our services</Text>
-        <Text style={bullet}>• Notifying you about changes to our services</Text>
-        <Text style={bullet}>• Providing customer support</Text>
-        <Text style={bullet}>• Detecting and preventing technical issues</Text>
-
-        <Text style={sectionTitle}>Data Storage and Security</Text>
+        <Text style={sectionTitle}>Acceptance of Terms</Text>
         <Text style={body}>
-          Your data security is important to us. We implement appropriate security measures to protect against unauthorized access, alteration, disclosure, or destruction of your information.
+          By accessing or using NourishNet, you agree to be bound by these Terms of Use and our Privacy Policy. If you do not agree to these terms, please do not use our services.
         </Text>
-        <Text style={bullet}>• Data encryption in transit and at rest</Text>
-        <Text style={bullet}>• Regular security assessments</Text>
-        <Text style={bullet}>• Limited access to personal information</Text>
-        <Text style={bullet}>• Secure data storage facilities</Text>
 
-        <Text style={sectionTitle}>Updates to Policy</Text>
+        <Text style={sectionTitle}>Subscription Terms</Text>
         <Text style={body}>
-          We may update our Privacy Policy from time to time. We will notify you of any changes by posting the new Privacy Policy on this page and updating the "Last updated" date.
+          NourishNet offers auto-renewable subscription plans (Pro) with the following terms:
+        </Text>
+        <Text style={bullet}>• Subscriptions are billed monthly or annually based on your selected plan</Text>
+        <Text style={bullet}>• Payment will be charged to your App Store account at confirmation of purchase</Text>
+        <Text style={bullet}>• Subscriptions automatically renew unless auto-renew is turned off at least 24 hours before the end of the current period</Text>
+        <Text style={bullet}>• Your account will be charged for renewal within 24 hours prior to the end of the current period</Text>
+        <Text style={bullet}>• You can manage your subscription and turn off auto-renewal in your App Store account settings</Text>
+        <Text style={bullet}>• No refunds will be provided for any unused portion of the subscription term</Text>
+        <Text style={bullet}>• Any unused portion of a free trial period will be forfeited when you purchase a subscription</Text>
+
+        <Text style={sectionTitle}>User Responsibilities</Text>
+        <Text style={body}>You agree to:</Text>
+        <Text style={bullet}>• Provide accurate and complete information</Text>
+        <Text style={bullet}>• Maintain the security of your account credentials</Text>
+        <Text style={bullet}>• Use the service in compliance with all applicable laws</Text>
+        <Text style={bullet}>• Not misuse or abuse the platform</Text>
+        <Text style={bullet}>• Respect other users and community guidelines</Text>
+
+        <Text style={sectionTitle}>Service Availability</Text>
+        <Text style={body}>
+          We strive to provide reliable service but do not guarantee uninterrupted access. We reserve the right to modify, suspend, or discontinue any part of the service at any time.
+        </Text>
+
+        <Text style={sectionTitle}>Intellectual Property</Text>
+        <Text style={body}>
+          All content, features, and functionality of NourishNet are owned by us and are protected by copyright, trademark, and other intellectual property laws.
+        </Text>
+
+        <Text style={sectionTitle}>Limitation of Liability</Text>
+        <Text style={body}>
+          To the maximum extent permitted by law, NourishNet shall not be liable for any indirect, incidental, special, consequential, or punitive damages resulting from your use of or inability to use the service.
+        </Text>
+
+        <Text style={sectionTitle}>Changes to Terms</Text>
+        <Text style={body}>
+          We may update these Terms of Use from time to time. We will notify you of any changes by posting the new Terms of Use on this page and updating the "Last updated" date. Your continued use of the service after changes constitutes acceptance of the new terms.
+        </Text>
+
+        <Text style={sectionTitle}>Contact Us</Text>
+        <Text style={body}>
+          If you have any questions about these Terms of Use, please contact us through the app support section.
         </Text>
       </ScrollView>
     </View>

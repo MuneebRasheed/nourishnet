@@ -13,6 +13,11 @@ export type AnalyticsSummaryCache = {
   monthRatios: number[];
   firstPickupAgo: string;
   ecoWarriorAgo: string;
+  // Recipient-specific metrics
+  lastPickupDate: string | null;
+  pickupSuccessRate: number;
+  totalRequests: number;
+  acceptedRequests: number;
 };
 
 const DEFAULT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -28,6 +33,10 @@ export const DEFAULT_ANALYTICS_CACHE: AnalyticsSummaryCache = {
   monthRatios: DEFAULT_BAR_DATA,
   firstPickupAgo: 'Not yet',
   ecoWarriorAgo: 'Not yet',
+  lastPickupDate: null,
+  pickupSuccessRate: 0,
+  totalRequests: 0,
+  acceptedRequests: 0,
 };
 
 type AnalyticsSummaryState = {
