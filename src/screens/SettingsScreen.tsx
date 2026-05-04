@@ -11,6 +11,7 @@ import {
   Modal,
   Pressable,
   Dimensions,
+  Share,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -147,6 +148,25 @@ export default function SettingsScreen() {
 
   const handleSubscriptionManagement = () => {
     navigation.navigate('SubscriptionManagementScreen');
+  };
+
+  const handleInviteProvider = async () => {
+    try {
+      const message = `Hi! I'm using NourishNet — an app that connects local food providers with people in need nearby.
+
+There's currently demand in our area, and your business could make a real impact by sharing extra food instead of wasting it.
+
+You can sign up here in under 2 minutes:
+[link]
+
+It would mean a lot to the community`;
+
+      await Share.share({
+        message,
+      });
+    } catch (error) {
+      console.error('Error sharing:', error);
+    }
   };
 
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
@@ -361,6 +381,28 @@ export default function SettingsScreen() {
                 iconComponent={<KingIcon width={20} height={20} color={colors.text} />}
                 label="Subscription Management"
                 onPress={handleSubscriptionManagement}
+                isLast={true}
+              />
+            </View>
+          </View>
+        )}
+
+        {isProvider && (
+          <View style={styles.sectionWrapper}>
+            <Text
+              style={[
+                styles.sectionTitle,
+                { color: colors.text, fontFamily: fontFamilies.poppinsSemiBold, fontSize: fonts.subhead },
+              ]}
+            >
+              Community
+            </Text>
+            <View style={styles.sectionCard}>
+              <SettingsRow
+                backgroundColor={colors.inputFieldBg}
+                icon="share-social-outline"
+                label="Invite a Food Provider"
+                onPress={handleInviteProvider}
                 isLast={true}
               />
             </View>

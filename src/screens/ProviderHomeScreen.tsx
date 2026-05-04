@@ -8,6 +8,7 @@ import {
   RefreshControl,
   ImageSourcePropType,
   TouchableOpacity,
+  Share,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -172,6 +173,25 @@ export default function ProviderHomeScreen() {
 
   const handleTrackImpact = () => {
     navigation.navigate('MainTabs', { screen: 'Analytics' });
+  };
+
+  const handleInviteProvider = async () => {
+    try {
+      const message = `Hi! I'm using NourishNet — an app that connects local food providers with people in need nearby.
+
+There's currently demand in our area, and your business could make a real impact by sharing extra food instead of wasting it.
+
+You can sign up here in under 2 minutes:
+[link]
+
+It would mean a lot to the community`;
+
+      await Share.share({
+        message,
+      });
+    } catch (error) {
+      console.error('Error sharing:', error);
+    }
   };
 
   const handleCreateFirstListing = () => {
@@ -397,6 +417,15 @@ export default function ProviderHomeScreen() {
             />
           </ProviderQuickActionsRow>
 
+          <ContinueButton
+            label="Invite a Food Provider"
+            onPress={handleInviteProvider}
+            isDark={isDark}
+            icon={<Ionicons name="share-social-outline" size={22} color={palette.white} />}
+            iconPosition="left"
+            style={styles.inviteButton}
+          />
+
           <View style={styles.sectionHeaderRow}>
             <Text
               style={[
@@ -607,4 +636,8 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   upgradeLinkText: {},
+  inviteButton: {
+    marginTop: 16,
+    width: '100%',
+  },
 });

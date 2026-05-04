@@ -20,6 +20,7 @@ import { markOnboardingComplete } from '../lib/onboardingStorage'
 import { useAuthStore } from '../../store/authStore'
 import { completeAuthAndGoToMainTabs } from '../lib/authSession'
 import { signInWithApple, signInWithGoogle } from '../lib/oauth'
+import { supabase } from '../lib/supabase'
 
 const SignupScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
@@ -83,23 +84,104 @@ const SignupScreen = () => {
 
     setLoading(true)
     try {
-      const res = await fetch(`${API_BASE_URL}/auth/start-signup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: trimmedEmail, role: role ?? 'recipient' }),
-      })
-      const body = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setFormError(body?.error ?? 'Sign up failed. Please try again.')
-        return
+      const effectiveRole = role ?? 'recipient'
+      
+      // Recipients skip OTP verification
+      if (effectiveRole === 'recipient') {
+        console.log('[SignupScreen] Signing up recipient:', trimmedEmail)
+        const res = await fetch(`${API_BASE_URL}/auth/signup-recipient`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: trimmedEmail, password }),
+        })
+        console.log('[SignupScreen] Response status:', res.status)
+        const body = await res.json().catch((e) => {
+          console.error('[SignupScreen] Failed to parse response:', e)
+          return {}
+        })
+        console.log('[SignupScreen] Response body:', body)
+        if (!res.ok) {
+          setFormError(body?.error ?? 'Sign up failed. Please try again.')
+          return
+        }
+        
+        // Sign in the newly created user
+        console.log('[SignupScreen] Signing in user...')
+        const { error: signInError } = await supabase.auth.signInWithPassword({ 
+          email: trimmedEmail, 
+          password 
+        })
+        if (signInError) {
+          console.error('[SignupScreen] Sign in error:', signInError)
+          setFormError(signInError.message ?? 'Sign in failed. Please try again.')
+          return
+        }
+        
+        // Wait a moment for the database to update
+        await new Promise(resolve => setTimeout(resolve, 500))
+        
+        // Fetch the profile to get the anonymous username
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          const { data: profileData } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', user.id)
+            .single()
+          
+          if (profileData) {
+            const profileObj = {
+              id: profileData.id,
+              role: profileData.role,
+              email: profileData.email,
+              full_name: profileData.full_name,
+              avatar_url: profileData.avatar_url,
+              address: profileData.address,
+              latitude: profileData.latitude,
+              longitude: profileData.longitude,
+              phone: profileData.phone,
+              business_name: profileData.business_name,
+              business_address: profileData.business_address,
+              business_latitude: profileData.business_latitude,
+              business_longitude: profileData.business_longitude,
+              categories: profileData.categories || [],
+              created_at: profileData.created_at,
+              updated_at: profileData.updated_at,
+            }
+            setAuth(profileData.role, profileObj)
+          }
+        }
+        
+        console.log('[SignupScreen] Sign in successful, navigating to profile...')
+        await markOnboardingComplete()
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'EditProfileScreen', params: { email: trimmedEmail } }],
+        })
+      } else {
+        // Providers go through OTP verification
+        console.log('[SignupScreen] Signing up provider:', trimmedEmail)
+        const res = await fetch(`${API_BASE_URL}/auth/start-signup`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: trimmedEmail, role: effectiveRole }),
+        })
+        const body = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          setFormError(body?.error ?? 'Sign up failed. Please try again.')
+          return
+        }
+        await markOnboardingComplete()
+        navigation.navigate('VerificationCodeScreen', {
+          email: trimmedEmail,
+          context: 'signup',
+          password,
+          role: effectiveRole,
+        })
       }
-      await markOnboardingComplete()
-      navigation.navigate('VerificationCodeScreen', {
-        email: trimmedEmail,
-        context: 'signup',
-        password,
-        ...(role && { role }),
-      })
+    } catch (error) {
+      console.error('[SignupScreen] Unexpected error:', error)
+      setFormError('Network error. Please check your connection and try again.')
     } finally {
       setLoading(false)
     }

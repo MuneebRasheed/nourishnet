@@ -81,6 +81,104 @@ async function findUserByEmail(admin, email) {
   }
 }
 
+// ---------- Recipient signup (no OTP) ----------
+router.post('/signup-recipient', async (req, res) => {
+  try {
+    console.log('[signup-recipient] Request received:', { email: req.body?.email });
+    const email = normalizeEmail(req.body?.email);
+    const password = typeof req.body?.password === 'string' ? req.body.password : '';
+    
+    if (!email) {
+      console.log('[signup-recipient] Email missing');
+      return send(res, { error: 'Email is required' }, 400);
+    }
+    if (password.length < 6) {
+      console.log('[signup-recipient] Password too short');
+      return send(res, { error: 'Password must be at least 6 characters' }, 400);
+    }
+    
+    console.log('[signup-recipient] Creating Supabase admin client...');
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
+    
+    console.log('[signup-recipient] Checking if user exists...');
+    const user = await findUserByEmail(supabaseAdmin, email);
+    if (user) {
+      console.log('[signup-recipient] User already exists');
+      return send(res, { error: 'An account with this email already exists.' }, 400);
+    }
+    
+    // Create user directly without OTP verification
+    console.log('[signup-recipient] Creating user account...');
+    const { data: createdAuth, error: createAuthError } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+    });
+    
+    if (createAuthError || !createdAuth?.user?.id) {
+      console.error('[signup-recipient] Failed to create user:', createAuthError);
+      return send(res, { error: createAuthError?.message ?? 'Failed to create account.' }, 400);
+    }
+    
+    console.log('[signup-recipient] User created:', createdAuth.user.id);
+    
+    // Wait for the trigger to create the profile row (trigger runs AFTER INSERT)
+    console.log('[signup-recipient] Waiting for profile trigger to complete...');
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    // Verify profile exists
+    const { data: existingProfile, error: checkError } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('id', createdAuth.user.id)
+      .single();
+    
+    if (checkError || !existingProfile) {
+      console.error('[signup-recipient] Profile not found after trigger:', checkError);
+      await supabaseAdmin.auth.admin.deleteUser(createdAuth.user.id);
+      return send(res, { error: 'Failed to create profile. Please try again.' }, 500);
+    }
+    
+    console.log('[signup-recipient] Profile exists, proceeding with update...');
+    
+    // Generate anonymous username: AnonymousUser + 4 random digits
+    const randomDigits = Math.floor(1000 + Math.random() * 9000); // Generates 1000-9999
+    const anonymousName = `AnonymousUser${randomDigits}`;
+    
+    // Set role to recipient and anonymous username
+    console.log('[signup-recipient] Setting role to recipient and username:', anonymousName);
+    const { data: updateData, error: profileRoleError } = await supabaseAdmin
+      .from('profiles')
+      .update({
+        role: 'recipient',
+        full_name: anonymousName,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', createdAuth.user.id)
+      .select();
+      
+    console.log('[signup-recipient] Update result:', { updateData, profileRoleError });
+      
+    if (profileRoleError) {
+      console.error('[signup-recipient] Failed to set role:', profileRoleError);
+      await supabaseAdmin.auth.admin.deleteUser(createdAuth.user.id);
+      return send(res, { error: 'Failed to finish signup. Please try again.' }, 500);
+    }
+    
+    if (!updateData || updateData.length === 0) {
+      console.error('[signup-recipient] No rows updated - profile might not exist yet');
+      await supabaseAdmin.auth.admin.deleteUser(createdAuth.user.id);
+      return send(res, { error: 'Failed to finish signup. Please try again.' }, 500);
+    }
+    
+    console.log('[signup-recipient] Signup successful');
+    return send(res, { success: true }, 200);
+  } catch (e) {
+    console.error('[signup-recipient] Unexpected error:', e);
+    return send(res, { error: 'Something went wrong' }, 500);
+  }
+});
+
 // ---------- Signup OTP ----------
 router.post('/start-signup', async (req, res) => {
   try {

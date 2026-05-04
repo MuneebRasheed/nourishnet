@@ -51,8 +51,9 @@ const EditProfileScreen = ({ route }: Props) => {
         if (p.avatar_url) setProfileImageUri(p.avatar_url)
         return
       }
+      // If profile not in store, fetch it from database
       const { data: { user } } = await supabase.auth.getUser()
-      if (user && !p) {
+      if (user) {
         const fetched = await fetchProfile(user.id)
         if (fetched && fetched.role === 'recipient') {
           setProfile(fetched)
@@ -65,7 +66,7 @@ const EditProfileScreen = ({ route }: Props) => {
       }
     }
     load(profile)
-  }, [profile?.id])
+  }, [profile?.id, profile?.updated_at])
 
   const handleUploadPhoto = async () => {
     const result = await pickImage()
@@ -81,7 +82,7 @@ const EditProfileScreen = ({ route }: Props) => {
 
   const handleCompleteProfile = async () => {
     if (submitting) return
-    // Full name is optional for recipients
+    // Full name is optional for recipients (auto-generated anonymous name can be kept or changed)
     if (!address.trim()) {
       setError('Address is required.')
       return
@@ -215,8 +216,8 @@ const EditProfileScreen = ({ route }: Props) => {
           <View style={styles.form}>
             <AuthInput
               type="text"
-              label="Full Name"
-              placeholder="Your full name"
+              label="Full Name (Optional)"
+              placeholder="e.g., AnonymousUser1234"
               value={fullName}
               onChangeText={setFullName}
             />
