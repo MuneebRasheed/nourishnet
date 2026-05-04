@@ -309,7 +309,7 @@ export default function SubscriptionManagementScreen() {
         </Text>
         
         <View style={styles.legalLinks}>
-          <Pressable onPress={() => navigation.navigate('PrivacyPolicyScreen')}>
+          <Pressable onPress={() => void Linking.openURL('https://www.termsfeed.com/live/9f7ebb69-3768-4199-b8c8-d9a2231208e2')}>
             <Text
               style={[
                 styles.legalLink,
@@ -346,6 +346,31 @@ export default function SubscriptionManagementScreen() {
               ]}
             >
               Terms of Use
+            </Text>
+          </Pressable>
+          <Text
+            style={[
+              styles.legalSeparator,
+              {
+                color: colors.textSecondary,
+                fontSize: fontSizes.subhead,
+              },
+            ]}
+          >
+            {' • '}
+          </Text>
+          <Pressable onPress={() => void Linking.openURL('https://www.apple.com/legal/internet-services/itunes/dev/stdeula/')}>
+            <Text
+              style={[
+                styles.legalLink,
+                {
+                  color: palette.restorePurchasesColor,
+                  fontFamily: fontFamilies.interMedium,
+                  fontSize: fontSizes.subhead,
+                },
+              ]}
+            >
+              EULA
             </Text>
           </Pressable>
         </View>

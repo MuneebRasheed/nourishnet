@@ -78,7 +78,8 @@ export function needsProfileCompletion(profile: Profile | null): boolean {
     const lat = profile.latitude ?? null;
     const lng = profile.longitude ?? null;
     const needsCoords = isGoogleMapsConfigured() && (lat == null || lng == null);
-    return !profile.full_name?.trim() || !profile.address?.trim() || needsCoords;
+    // Full name is optional for recipients, only address is required
+    return !profile.address?.trim() || needsCoords;
   }
   return true;
 }

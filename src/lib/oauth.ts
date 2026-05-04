@@ -67,6 +67,23 @@ export async function signInWithGoogle(): Promise<OAuthResult> {
       return { data: null, error };
     }
     if (data?.user && data?.session) {
+      // Pre-populate profile with name and email from Google if available
+      const userInfo = response.data.user;
+      if (userInfo) {
+        const updates: { full_name?: string; email?: string } = {};
+        if (userInfo.name) {
+          updates.full_name = userInfo.name;
+        }
+        if (userInfo.email) {
+          updates.email = userInfo.email;
+        }
+        if (Object.keys(updates).length > 0) {
+          await supabase
+            .from('profiles')
+            .update(updates)
+            .eq('id', data.user.id);
+        }
+      }
       return {
         data: { user: data.user, session: data.session },
         error: null,
@@ -125,15 +142,31 @@ export async function signInWithApple(): Promise<OAuthResult> {
       return { data: null, error };
     }
     if (data?.user && data?.session) {
+      // Pre-populate profile with name from Apple if available
       if (credential.fullName) {
         const givenName = credential.fullName.givenName?.trim() ?? '';
         const familyName = credential.fullName.familyName?.trim() ?? '';
         if (givenName || familyName) {
+          const fullName = [givenName, familyName].filter(Boolean).join(' ');
+          // Store in auth user metadata
           await supabase.auth.updateUser({
             data: { givenName, familyName },
           });
+          // Also pre-populate the profile table so EditProfileScreen can use it
+          await supabase
+            .from('profiles')
+            .update({ full_name: fullName })
+            .eq('id', data.user.id);
           await supabase.auth.refreshSession();
         }
+      }
+      // Pre-populate email from Apple if available and not already set
+      if (credential.email) {
+        await supabase
+          .from('profiles')
+          .update({ email: credential.email })
+          .eq('id', data.user.id)
+          .is('email', null);
       }
       return {
         data: { user: data.user, session: data.session },

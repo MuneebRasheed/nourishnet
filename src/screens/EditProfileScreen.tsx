@@ -81,10 +81,7 @@ const EditProfileScreen = ({ route }: Props) => {
 
   const handleCompleteProfile = async () => {
     if (submitting) return
-    if (!fullName.trim()) {
-      setError('Full name is required.')
-      return
-    }
+    // Full name is optional for recipients
     if (!address.trim()) {
       setError('Address is required.')
       return
@@ -218,16 +215,11 @@ const EditProfileScreen = ({ route }: Props) => {
           <View style={styles.form}>
             <AuthInput
               type="text"
-              label="Full Name*"
+              label="Full Name"
               placeholder="Your full name"
               value={fullName}
               onChangeText={setFullName}
             />
-            {error === 'Full name is required.' ? (
-              <Text style={[styles.fieldErrorText, { color: '#dc2626', fontFamily: fontFamilies.inter, fontSize: fonts.subhead }]}>
-                {error}
-              </Text>
-            ) : null}
             <AuthInput
               type="email"
               label="Email Address"
@@ -277,7 +269,7 @@ const EditProfileScreen = ({ route }: Props) => {
               },
             ]}
           >
-            All fields marked with * are required
+            Fields marked with * are required
           </Text>
         </View>
       </ScrollView>
